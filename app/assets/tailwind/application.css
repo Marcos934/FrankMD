@@ -50,6 +50,9 @@
   --theme-heading-1: #2563eb;
   --theme-heading-2: #7c3aed;
   --theme-heading-3: #0891b2;
+  --theme-folder-icon: #3b82f6;
+  --theme-file-icon: #71717a;
+  --theme-config-icon: #f59e0b;
 }
 
 /* Dark Theme */
@@ -77,6 +80,9 @@
   --theme-heading-1: #60a5fa;
   --theme-heading-2: #a78bfa;
   --theme-heading-3: #22d3ee;
+  --theme-folder-icon: #60a5fa;
+  --theme-file-icon: #a1a1aa;
+  --theme-config-icon: #fbbf24;
 }
 
 /* Gruvbox Theme - Retro groove color scheme */
@@ -104,6 +110,9 @@
   --theme-heading-1: #fabd2f;
   --theme-heading-2: #8ec07c;
   --theme-heading-3: #83a598;
+  --theme-folder-icon: #fe8019;
+  --theme-file-icon: #a89984;
+  --theme-config-icon: #fabd2f;
 }
 
 /* Tokyo Night Theme - Futuristic city lights */
@@ -131,6 +140,9 @@
   --theme-heading-1: #bb9af7;
   --theme-heading-2: #7dcfff;
   --theme-heading-3: #73daca;
+  --theme-folder-icon: #bb9af7;
+  --theme-file-icon: #565f89;
+  --theme-config-icon: #e0af68;
 }
 
 /* Solarized Dark Theme - Precision colors for machines and people */
@@ -158,6 +170,9 @@
   --theme-heading-1: #b58900;
   --theme-heading-2: #cb4b16;
   --theme-heading-3: #2aa198;
+  --theme-folder-icon: #2aa198;
+  --theme-file-icon: #657b83;
+  --theme-config-icon: #b58900;
 }
 
 /* Solarized Light Theme */
@@ -185,6 +200,9 @@
   --theme-heading-1: #b58900;
   --theme-heading-2: #cb4b16;
   --theme-heading-3: #2aa198;
+  --theme-folder-icon: #268bd2;
+  --theme-file-icon: #93a1a1;
+  --theme-config-icon: #b58900;
 }
 
 /* Nord Theme - Arctic, north-bluish color palette */
@@ -212,6 +230,9 @@
   --theme-heading-1: #81a1c1;
   --theme-heading-2: #b48ead;
   --theme-heading-3: #a3be8c;
+  --theme-folder-icon: #81a1c1;
+  --theme-file-icon: #7b88a1;
+  --theme-config-icon: #ebcb8b;
 }
 
 /* Cappuccino Theme - Warm coffee tones */
@@ -239,6 +260,9 @@
   --theme-heading-1: #e6ac82;
   --theme-heading-2: #d4956a;
   --theme-heading-3: #a3c585;
+  --theme-folder-icon: #d4956a;
+  --theme-file-icon: #9a8b7d;
+  --theme-config-icon: #e6ac82;
 }
 
 /* Osaka Theme - Japanese aesthetic, cherry blossom inspired */
@@ -266,6 +290,9 @@
   --theme-heading-1: #e8a4c9;
   --theme-heading-2: #a4c8e8;
   --theme-heading-3: #a4d4a2;
+  --theme-folder-icon: #e8a4c9;
+  --theme-file-icon: #9088a0;
+  --theme-config-icon: #e8c899;
 }
 
 /* Hackerman Theme - Matrix-style green on black */
@@ -293,6 +320,9 @@
   --theme-heading-1: #00ff00;
   --theme-heading-2: #00dddd;
   --theme-heading-3: #dddd00;
+  --theme-folder-icon: #00ff00;
+  --theme-file-icon: #00aa00;
+  --theme-config-icon: #ffff00;
 }
 
 /* Custom scrollbar - uses theme variables */
