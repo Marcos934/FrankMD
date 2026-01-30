@@ -1,0 +1,380 @@
+import { Controller } from "@hotwired/stimulus"
+
+// Table Editor Controller
+// Manages the table editing dialog and generates markdown tables
+export default class extends Controller {
+  static targets = [
+    "dialog",
+    "grid",
+    "size",
+    "cellMenu",
+    "moveColLeftBtn",
+    "moveColRightBtn",
+    "deleteColBtn",
+    "moveRowUpBtn",
+    "moveRowDownBtn",
+    "deleteRowBtn"
+  ]
+
+  connect() {
+    this.tableData = []
+    this.editMode = false
+    this.startPos = 0
+    this.endPos = 0
+    this.selectedCellRow = 0
+    this.selectedCellCol = 0
+
+    // Listen for open event from app controller
+    window.addEventListener("webnotes:open-table-editor", this.handleOpen.bind(this))
+  }
+
+  disconnect() {
+    window.removeEventListener("webnotes:open-table-editor", this.handleOpen.bind(this))
+  }
+
+  handleOpen(event) {
+    const { existingTable, startPos, endPos } = event.detail || {}
+
+    if (existingTable) {
+      this.editMode = true
+      this.startPos = startPos
+      this.endPos = endPos
+      this.tableData = this.parseMarkdownTable(existingTable)
+
+      if (this.tableData.length === 0) {
+        this.tableData = [["Header 1", "Header 2", "Header 3"]]
+      }
+    } else {
+      this.editMode = false
+      this.tableData = [
+        ["Header 1", "Header 2", "Header 3"],
+        ["", "", ""],
+        ["", "", ""]
+      ]
+    }
+
+    this.renderGrid()
+    this.dialogTarget.showModal()
+  }
+
+  close() {
+    this.dialogTarget.close()
+  }
+
+  // Parse markdown table into 2D array
+  parseMarkdownTable(lines) {
+    const rows = []
+    const lineArray = Array.isArray(lines) ? lines : lines.split("\n")
+
+    for (const line of lineArray) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+
+      // Skip separator row (|---|---|)
+      if (/^\|[\s\-:]+\|$/.test(trimmed) || /^\|(\s*:?-+:?\s*\|)+$/.test(trimmed)) {
+        continue
+      }
+
+      // Split by | and remove empty first/last elements
+      const cells = trimmed.split("|")
+        .slice(1, -1)
+        .map(cell => cell.trim())
+
+      if (cells.length > 0) {
+        rows.push(cells)
+      }
+    }
+
+    return rows
+  }
+
+  // Generate markdown table from 2D array
+  generateMarkdownTable() {
+    if (!this.tableData || this.tableData.length === 0) return ""
+
+    const colCount = Math.max(...this.tableData.map(row => row.length))
+
+    // Normalize all rows to same column count
+    const normalizedData = this.tableData.map(row => {
+      const newRow = [...row]
+      while (newRow.length < colCount) {
+        newRow.push("")
+      }
+      return newRow
+    })
+
+    // Calculate column widths
+    const widths = []
+    for (let col = 0; col < colCount; col++) {
+      widths[col] = Math.max(3, ...normalizedData.map(row => (row[col] || "").length))
+    }
+
+    // Build table
+    const lines = []
+
+    // Header row
+    const headerCells = normalizedData[0].map((cell, i) => cell.padEnd(widths[i]))
+    lines.push("| " + headerCells.join(" | ") + " |")
+
+    // Separator row
+    const separatorCells = widths.map(w => "-".repeat(w))
+    lines.push("| " + separatorCells.join(" | ") + " |")
+
+    // Data rows
+    for (let i = 1; i < normalizedData.length; i++) {
+      const cells = normalizedData[i].map((cell, j) => cell.padEnd(widths[j]))
+      lines.push("| " + cells.join(" | ") + " |")
+    }
+
+    return lines.join("\n")
+  }
+
+  renderGrid() {
+    const rows = this.tableData.length
+    const cols = this.tableData[0]?.length || 3
+
+    this.sizeTarget.textContent = `${cols} x ${rows}`
+
+    let html = '<table class="table-editor-grid w-full">'
+
+    for (let r = 0; r < rows; r++) {
+      html += '<tr>'
+      for (let c = 0; c < cols; c++) {
+        const value = this.tableData[r]?.[c] || ""
+        const isHeader = r === 0
+        const cellClass = isHeader ? "font-semibold bg-zinc-100 dark:bg-zinc-700" : ""
+        html += `
+          <td class="${cellClass}" data-row="${r}" data-col="${c}" data-action="contextmenu->table-editor#showCellMenu">
+            <input
+              type="text"
+              value="${this.escapeHtml(value)}"
+              data-row="${r}"
+              data-col="${c}"
+              data-action="input->table-editor#onCellInput contextmenu->table-editor#showCellMenu"
+              class="w-full px-2 py-1 text-sm bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100"
+              placeholder="${isHeader ? 'Header' : ''}"
+            >
+          </td>
+        `
+      }
+      html += '</tr>'
+    }
+
+    html += '</table>'
+    this.gridTarget.innerHTML = html
+  }
+
+  escapeHtml(text) {
+    const div = document.createElement("div")
+    div.textContent = text
+    return div.innerHTML
+  }
+
+  onCellInput(event) {
+    const row = parseInt(event.target.dataset.row)
+    const col = parseInt(event.target.dataset.col)
+    const value = event.target.value
+
+    while (this.tableData.length <= row) {
+      this.tableData.push([])
+    }
+    while (this.tableData[row].length <= col) {
+      this.tableData[row].push("")
+    }
+
+    this.tableData[row][col] = value
+  }
+
+  addColumn() {
+    const cols = this.tableData[0]?.length || 0
+    for (let i = 0; i < this.tableData.length; i++) {
+      this.tableData[i].push(i === 0 ? `Header ${cols + 1}` : "")
+    }
+    this.renderGrid()
+  }
+
+  removeColumn() {
+    if (!this.tableData[0] || this.tableData[0].length <= 1) return
+    for (let i = 0; i < this.tableData.length; i++) {
+      this.tableData[i].pop()
+    }
+    this.renderGrid()
+  }
+
+  addRow() {
+    const cols = this.tableData[0]?.length || 3
+    this.tableData.push(new Array(cols).fill(""))
+    this.renderGrid()
+  }
+
+  removeRow() {
+    if (this.tableData.length <= 1) return
+    this.tableData.pop()
+    this.renderGrid()
+  }
+
+  insert() {
+    if (!this.tableData || this.tableData.length === 0) {
+      this.close()
+      return
+    }
+
+    const markdown = this.generateMarkdownTable()
+
+    // Dispatch event for app controller to handle insertion
+    window.dispatchEvent(new CustomEvent("webnotes:insert-table", {
+      detail: {
+        markdown,
+        editMode: this.editMode,
+        startPos: this.startPos,
+        endPos: this.endPos
+      }
+    }))
+
+    this.close()
+  }
+
+  // Cell Context Menu
+  showCellMenu(event) {
+    event.preventDefault()
+    event.stopPropagation()
+
+    let target = event.target
+    if (target.tagName === "INPUT") {
+      target = target.closest("td")
+    }
+
+    this.selectedCellRow = parseInt(target.dataset.row)
+    this.selectedCellCol = parseInt(target.dataset.col)
+
+    const rows = this.tableData.length
+    const cols = this.tableData[0]?.length || 0
+
+    // Enable/disable buttons based on position
+    this.moveColLeftBtnTarget.classList.toggle("opacity-50", this.selectedCellCol === 0)
+    this.moveColLeftBtnTarget.disabled = this.selectedCellCol === 0
+
+    this.moveColRightBtnTarget.classList.toggle("opacity-50", this.selectedCellCol >= cols - 1)
+    this.moveColRightBtnTarget.disabled = this.selectedCellCol >= cols - 1
+
+    this.deleteColBtnTarget.classList.toggle("opacity-50", cols <= 1)
+    this.deleteColBtnTarget.disabled = cols <= 1
+
+    this.moveRowUpBtnTarget.classList.toggle("opacity-50", this.selectedCellRow <= 1)
+    this.moveRowUpBtnTarget.disabled = this.selectedCellRow <= 1
+
+    this.moveRowDownBtnTarget.classList.toggle("opacity-50", this.selectedCellRow === 0 || this.selectedCellRow >= rows - 1)
+    this.moveRowDownBtnTarget.disabled = this.selectedCellRow === 0 || this.selectedCellRow >= rows - 1
+
+    this.deleteRowBtnTarget.classList.toggle("opacity-50", rows <= 1 || this.selectedCellRow === 0)
+    this.deleteRowBtnTarget.disabled = rows <= 1 || this.selectedCellRow === 0
+
+    const menu = this.cellMenuTarget
+    menu.classList.remove("hidden")
+    menu.style.left = `${event.clientX}px`
+    menu.style.top = `${event.clientY}px`
+
+    requestAnimationFrame(() => {
+      const rect = menu.getBoundingClientRect()
+      if (rect.right > window.innerWidth) {
+        menu.style.left = `${window.innerWidth - rect.width - 10}px`
+      }
+      if (rect.bottom > window.innerHeight) {
+        menu.style.top = `${window.innerHeight - rect.height - 10}px`
+      }
+    })
+
+    const closeMenu = (e) => {
+      if (!menu.contains(e.target)) {
+        menu.classList.add("hidden")
+        document.removeEventListener("click", closeMenu)
+      }
+    }
+    setTimeout(() => document.addEventListener("click", closeMenu), 0)
+  }
+
+  hideCellMenu() {
+    this.cellMenuTarget.classList.add("hidden")
+  }
+
+  moveColumnLeft() {
+    this.hideCellMenu()
+    const col = this.selectedCellCol
+    if (col <= 0) return
+
+    for (let r = 0; r < this.tableData.length; r++) {
+      const temp = this.tableData[r][col]
+      this.tableData[r][col] = this.tableData[r][col - 1]
+      this.tableData[r][col - 1] = temp
+    }
+
+    this.selectedCellCol = col - 1
+    this.renderGrid()
+  }
+
+  moveColumnRight() {
+    this.hideCellMenu()
+    const col = this.selectedCellCol
+    const cols = this.tableData[0]?.length || 0
+    if (col >= cols - 1) return
+
+    for (let r = 0; r < this.tableData.length; r++) {
+      const temp = this.tableData[r][col]
+      this.tableData[r][col] = this.tableData[r][col + 1]
+      this.tableData[r][col + 1] = temp
+    }
+
+    this.selectedCellCol = col + 1
+    this.renderGrid()
+  }
+
+  deleteColumnAt() {
+    this.hideCellMenu()
+    const cols = this.tableData[0]?.length || 0
+    if (cols <= 1) return
+
+    const col = this.selectedCellCol
+    for (let r = 0; r < this.tableData.length; r++) {
+      this.tableData[r].splice(col, 1)
+    }
+
+    this.renderGrid()
+  }
+
+  moveRowUp() {
+    this.hideCellMenu()
+    const row = this.selectedCellRow
+    if (row <= 1) return
+
+    const temp = this.tableData[row]
+    this.tableData[row] = this.tableData[row - 1]
+    this.tableData[row - 1] = temp
+
+    this.selectedCellRow = row - 1
+    this.renderGrid()
+  }
+
+  moveRowDown() {
+    this.hideCellMenu()
+    const row = this.selectedCellRow
+    const rows = this.tableData.length
+    if (row === 0 || row >= rows - 1) return
+
+    const temp = this.tableData[row]
+    this.tableData[row] = this.tableData[row + 1]
+    this.tableData[row + 1] = temp
+
+    this.selectedCellRow = row + 1
+    this.renderGrid()
+  }
+
+  deleteRowAt() {
+    this.hideCellMenu()
+    const rows = this.tableData.length
+    const row = this.selectedCellRow
+    if (rows <= 1 || row === 0) return
+
+    this.tableData.splice(row, 1)
+    this.renderGrid()
+  }
+}

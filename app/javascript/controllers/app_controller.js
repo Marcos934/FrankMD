@@ -24,16 +24,6 @@ export default class extends Controller {
     "editorToolbar",
     "helpDialog",
     "tableHint",
-    "tableDialog",
-    "tableGrid",
-    "tableSize",
-    "tableCellMenu",
-    "moveColLeftBtn",
-    "moveColRightBtn",
-    "deleteColBtn",
-    "moveRowUpBtn",
-    "moveRowDownBtn",
-    "deleteRowBtn",
     "imageBtn",
     "imageDialog",
     "imageSearch",
@@ -126,14 +116,6 @@ export default class extends Controller {
     // Context menu click position (for positioning dialogs near click)
     this.contextClickX = 0
     this.contextClickY = 0
-
-    // Table editor state
-    this.tableData = []
-    this.tableEditMode = false  // true if editing existing table
-    this.tableStartPos = 0      // position in textarea where table starts
-    this.tableEndPos = 0        // position in textarea where table ends
-    this.selectedCellRow = 0    // row of right-clicked cell
-    this.selectedCellCol = 0    // column of right-clicked cell
 
     // Image picker state
     this.imagesEnabled = false
@@ -228,6 +210,7 @@ export default class extends Controller {
     this.applySidebarVisibility()
     this.applyTypewriterMode()
     this.setupConfigFileListener()
+    this.setupTableEditorListener()
 
     // Configure marked
     marked.setOptions({
@@ -788,73 +771,6 @@ export default class extends Controller {
     }
   }
 
-  // Parse markdown table into 2D array
-  parseMarkdownTable(lines) {
-    const rows = []
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim()
-      if (!line) continue
-
-      // Skip separator row (|---|---|)
-      if (/^\|[\s\-:]+\|$/.test(line) || /^\|(\s*:?-+:?\s*\|)+$/.test(line)) {
-        continue
-      }
-
-      // Split by | and remove empty first/last elements
-      const cells = line.split("|")
-        .slice(1, -1)
-        .map(cell => cell.trim())
-
-      if (cells.length > 0) {
-        rows.push(cells)
-      }
-    }
-
-    return rows
-  }
-
-  // Generate markdown table from 2D array
-  generateMarkdownTable(data) {
-    if (!data || data.length === 0) return ""
-
-    const colCount = Math.max(...data.map(row => row.length))
-
-    // Normalize all rows to same column count
-    const normalizedData = data.map(row => {
-      const newRow = [...row]
-      while (newRow.length < colCount) {
-        newRow.push("")
-      }
-      return newRow
-    })
-
-    // Calculate column widths
-    const widths = []
-    for (let col = 0; col < colCount; col++) {
-      widths[col] = Math.max(3, ...normalizedData.map(row => (row[col] || "").length))
-    }
-
-    // Build table
-    const lines = []
-
-    // Header row
-    const headerCells = normalizedData[0].map((cell, i) => cell.padEnd(widths[i]))
-    lines.push("| " + headerCells.join(" | ") + " |")
-
-    // Separator row
-    const separatorCells = widths.map(w => "-".repeat(w))
-    lines.push("| " + separatorCells.join(" | ") + " |")
-
-    // Data rows
-    for (let i = 1; i < normalizedData.length; i++) {
-      const cells = normalizedData[i].map((cell, j) => cell.padEnd(widths[j]))
-      lines.push("| " + cells.join(" | ") + " |")
-    }
-
-    return lines.join("\n")
-  }
-
   scheduleAutoSave() {
     if (this.saveTimeout) {
       clearTimeout(this.saveTimeout)
@@ -1090,8 +1006,12 @@ export default class extends Controller {
     }
   }
 
-  // Table Editor
+  // Table Editor - dispatches event for table_editor_controller to handle
   openTableEditor() {
+    let existingTable = null
+    let startPos = 0
+    let endPos = 0
+
     // Check if cursor is in existing table
     if (this.hasTextareaTarget) {
       const text = this.textareaTarget.value
@@ -1099,142 +1019,40 @@ export default class extends Controller {
       const tableInfo = this.findTableAtPosition(text, cursorPos)
 
       if (tableInfo) {
-        // Edit existing table
-        this.tableEditMode = true
-        this.tableStartPos = tableInfo.startPos
-        this.tableEndPos = tableInfo.endPos
-        this.tableData = this.parseMarkdownTable(tableInfo.lines)
-
-        // Ensure at least 1 row
-        if (this.tableData.length === 0) {
-          this.tableData = [["Header 1", "Header 2", "Header 3"]]
-        }
-      } else {
-        // New table with default 3x3
-        this.tableEditMode = false
-        this.tableData = [
-          ["Header 1", "Header 2", "Header 3"],
-          ["", "", ""],
-          ["", "", ""]
-        ]
+        existingTable = tableInfo.lines.join("\n")
+        startPos = tableInfo.startPos
+        endPos = tableInfo.endPos
       }
-    } else {
-      this.tableEditMode = false
-      this.tableData = [
-        ["Header 1", "Header 2", "Header 3"],
-        ["", "", ""],
-        ["", "", ""]
-      ]
     }
 
-    this.renderTableGrid()
-    this.tableDialogTarget.showModal()
+    // Dispatch event for table_editor_controller
+    window.dispatchEvent(new CustomEvent("webnotes:open-table-editor", {
+      detail: { existingTable, startPos, endPos }
+    }))
   }
 
-  closeTableDialog() {
-    this.tableDialogTarget.close()
+  // Setup listener for table insertion from table_editor_controller
+  setupTableEditorListener() {
+    window.addEventListener("webnotes:insert-table", this.handleTableInsert.bind(this))
   }
 
-  renderTableGrid() {
-    const rows = this.tableData.length
-    const cols = this.tableData[0]?.length || 3
+  // Handle table insertion from table_editor_controller
+  handleTableInsert(event) {
+    const { markdown, editMode, startPos, endPos } = event.detail
 
-    this.tableSizeTarget.textContent = `${cols} x ${rows}`
+    if (!this.hasTextareaTarget || !markdown) return
 
-    let html = '<table class="table-editor-grid w-full">'
-
-    for (let r = 0; r < rows; r++) {
-      html += '<tr>'
-      for (let c = 0; c < cols; c++) {
-        const value = this.tableData[r]?.[c] || ""
-        const isHeader = r === 0
-        const cellClass = isHeader ? "font-semibold bg-zinc-100 dark:bg-zinc-700" : ""
-        html += `
-          <td class="${cellClass}" data-row="${r}" data-col="${c}" data-action="contextmenu->app#showTableCellMenu">
-            <input
-              type="text"
-              value="${this.escapeHtml(value)}"
-              data-row="${r}"
-              data-col="${c}"
-              data-action="input->app#onTableCellInput contextmenu->app#showTableCellMenu"
-              class="w-full px-2 py-1 text-sm bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100"
-              placeholder="${isHeader ? 'Header' : ''}"
-            >
-          </td>
-        `
-      }
-      html += '</tr>'
-    }
-
-    html += '</table>'
-    this.tableGridTarget.innerHTML = html
-  }
-
-  onTableCellInput(event) {
-    const row = parseInt(event.target.dataset.row)
-    const col = parseInt(event.target.dataset.col)
-    const value = event.target.value
-
-    // Ensure row exists
-    while (this.tableData.length <= row) {
-      this.tableData.push([])
-    }
-
-    // Ensure col exists in row
-    while (this.tableData[row].length <= col) {
-      this.tableData[row].push("")
-    }
-
-    this.tableData[row][col] = value
-  }
-
-  addTableColumn() {
-    const cols = this.tableData[0]?.length || 0
-    for (let i = 0; i < this.tableData.length; i++) {
-      this.tableData[i].push(i === 0 ? `Header ${cols + 1}` : "")
-    }
-    this.renderTableGrid()
-  }
-
-  removeTableColumn() {
-    if (!this.tableData[0] || this.tableData[0].length <= 1) return
-
-    for (let i = 0; i < this.tableData.length; i++) {
-      this.tableData[i].pop()
-    }
-    this.renderTableGrid()
-  }
-
-  addTableRow() {
-    const cols = this.tableData[0]?.length || 3
-    this.tableData.push(new Array(cols).fill(""))
-    this.renderTableGrid()
-  }
-
-  removeTableRow() {
-    if (this.tableData.length <= 1) return
-    this.tableData.pop()
-    this.renderTableGrid()
-  }
-
-  insertTable() {
-    if (!this.hasTextareaTarget || !this.tableData || this.tableData.length === 0) {
-      this.tableDialogTarget.close()
-      return
-    }
-
-    const markdownTable = this.generateMarkdownTable(this.tableData)
     const textarea = this.textareaTarget
     const text = textarea.value
 
-    if (this.tableEditMode) {
+    if (editMode) {
       // Replace existing table
-      const before = text.substring(0, this.tableStartPos)
-      const after = text.substring(this.tableEndPos)
-      textarea.value = before + markdownTable + after
+      const before = text.substring(0, startPos)
+      const after = text.substring(endPos)
+      textarea.value = before + markdown + after
 
       // Position cursor after table
-      const newPos = this.tableStartPos + markdownTable.length
+      const newPos = startPos + markdown.length
       textarea.setSelectionRange(newPos, newPos)
     } else {
       // Insert at cursor
@@ -1246,173 +1064,16 @@ export default class extends Controller {
       const prefix = before.length > 0 && !before.endsWith("\n\n") ? (before.endsWith("\n") ? "\n" : "\n\n") : ""
       const suffix = after.length > 0 && !after.startsWith("\n\n") ? (after.startsWith("\n") ? "\n" : "\n\n") : ""
 
-      textarea.value = before + prefix + markdownTable + suffix + after
+      textarea.value = before + prefix + markdown + suffix + after
 
       // Position cursor after table
-      const newPos = before.length + prefix.length + markdownTable.length
+      const newPos = before.length + prefix.length + markdown.length
       textarea.setSelectionRange(newPos, newPos)
     }
 
     textarea.focus()
     this.scheduleAutoSave()
     this.updatePreview()
-    this.tableDialogTarget.close()
-  }
-
-  // Table Cell Context Menu
-  showTableCellMenu(event) {
-    event.preventDefault()
-    event.stopPropagation()
-
-    // Get cell position from the target or its parent
-    let target = event.target
-    if (target.tagName === "INPUT") {
-      target = target.closest("td")
-    }
-
-    this.selectedCellRow = parseInt(target.dataset.row)
-    this.selectedCellCol = parseInt(target.dataset.col)
-
-    const rows = this.tableData.length
-    const cols = this.tableData[0]?.length || 0
-
-    // Enable/disable buttons based on position
-    // Can't move left if at first column
-    this.moveColLeftBtnTarget.classList.toggle("opacity-50", this.selectedCellCol === 0)
-    this.moveColLeftBtnTarget.disabled = this.selectedCellCol === 0
-
-    // Can't move right if at last column
-    this.moveColRightBtnTarget.classList.toggle("opacity-50", this.selectedCellCol >= cols - 1)
-    this.moveColRightBtnTarget.disabled = this.selectedCellCol >= cols - 1
-
-    // Can't delete column if only 1 column
-    this.deleteColBtnTarget.classList.toggle("opacity-50", cols <= 1)
-    this.deleteColBtnTarget.disabled = cols <= 1
-
-    // Can't move up if at first row (header) or second row
-    this.moveRowUpBtnTarget.classList.toggle("opacity-50", this.selectedCellRow <= 1)
-    this.moveRowUpBtnTarget.disabled = this.selectedCellRow <= 1
-
-    // Can't move down if at last row or header row
-    this.moveRowDownBtnTarget.classList.toggle("opacity-50", this.selectedCellRow === 0 || this.selectedCellRow >= rows - 1)
-    this.moveRowDownBtnTarget.disabled = this.selectedCellRow === 0 || this.selectedCellRow >= rows - 1
-
-    // Can't delete row if only 1 row, and can't delete header row
-    this.deleteRowBtnTarget.classList.toggle("opacity-50", rows <= 1 || this.selectedCellRow === 0)
-    this.deleteRowBtnTarget.disabled = rows <= 1 || this.selectedCellRow === 0
-
-    const menu = this.tableCellMenuTarget
-    menu.classList.remove("hidden")
-    menu.style.left = `${event.clientX}px`
-    menu.style.top = `${event.clientY}px`
-
-    // Ensure menu doesn't go off-screen
-    requestAnimationFrame(() => {
-      const rect = menu.getBoundingClientRect()
-      if (rect.right > window.innerWidth) {
-        menu.style.left = `${window.innerWidth - rect.width - 10}px`
-      }
-      if (rect.bottom > window.innerHeight) {
-        menu.style.top = `${window.innerHeight - rect.height - 10}px`
-      }
-    })
-
-    // Close menu when clicking elsewhere
-    const closeMenu = (e) => {
-      if (!menu.contains(e.target)) {
-        menu.classList.add("hidden")
-        document.removeEventListener("click", closeMenu)
-      }
-    }
-    setTimeout(() => document.addEventListener("click", closeMenu), 0)
-  }
-
-  hideTableCellMenu() {
-    this.tableCellMenuTarget.classList.add("hidden")
-  }
-
-  moveColumnLeft() {
-    this.hideTableCellMenu()
-    const col = this.selectedCellCol
-    if (col <= 0) return
-
-    for (let r = 0; r < this.tableData.length; r++) {
-      const temp = this.tableData[r][col]
-      this.tableData[r][col] = this.tableData[r][col - 1]
-      this.tableData[r][col - 1] = temp
-    }
-
-    this.selectedCellCol = col - 1
-    this.renderTableGrid()
-  }
-
-  moveColumnRight() {
-    this.hideTableCellMenu()
-    const col = this.selectedCellCol
-    const cols = this.tableData[0]?.length || 0
-    if (col >= cols - 1) return
-
-    for (let r = 0; r < this.tableData.length; r++) {
-      const temp = this.tableData[r][col]
-      this.tableData[r][col] = this.tableData[r][col + 1]
-      this.tableData[r][col + 1] = temp
-    }
-
-    this.selectedCellCol = col + 1
-    this.renderTableGrid()
-  }
-
-  deleteColumnAt() {
-    this.hideTableCellMenu()
-    const cols = this.tableData[0]?.length || 0
-    if (cols <= 1) return
-
-    const col = this.selectedCellCol
-    for (let r = 0; r < this.tableData.length; r++) {
-      this.tableData[r].splice(col, 1)
-    }
-
-    this.renderTableGrid()
-  }
-
-  moveRowUp() {
-    this.hideTableCellMenu()
-    const row = this.selectedCellRow
-    // Can't move header row (0) or the row right after header (1)
-    if (row <= 1) return
-
-    const temp = this.tableData[row]
-    this.tableData[row] = this.tableData[row - 1]
-    this.tableData[row - 1] = temp
-
-    this.selectedCellRow = row - 1
-    this.renderTableGrid()
-  }
-
-  moveRowDown() {
-    this.hideTableCellMenu()
-    const row = this.selectedCellRow
-    const rows = this.tableData.length
-    // Can't move header row or last row
-    if (row === 0 || row >= rows - 1) return
-
-    const temp = this.tableData[row]
-    this.tableData[row] = this.tableData[row + 1]
-    this.tableData[row + 1] = temp
-
-    this.selectedCellRow = row + 1
-    this.renderTableGrid()
-  }
-
-  deleteRowAt() {
-    this.hideTableCellMenu()
-    const rows = this.tableData.length
-    const row = this.selectedCellRow
-    // Can't delete if only 1 row or if it's the header row
-    if (rows <= 1 || row === 0) return
-
-    this.tableData.splice(row, 1)
-    this.renderTableGrid()
   }
 
   // Image Picker
