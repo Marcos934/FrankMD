@@ -757,7 +757,7 @@ export default class extends Controller {
   // Get file type from path
   getFileType(path) {
     if (!path) return null
-    if (path === ".webnotes") return "config"
+    if (path === ".fed") return "config"
     if (path.endsWith(".md")) return "markdown"
     return "text"
   }
@@ -868,7 +868,7 @@ export default class extends Controller {
     }
 
     const content = this.textareaTarget.value
-    const isConfigFile = this.currentFile === ".webnotes"
+    const isConfigFile = this.currentFile === ".fed"
 
     try {
       const response = await fetch(`/notes/${this.encodePath(this.currentFile)}`, {
@@ -932,7 +932,7 @@ export default class extends Controller {
       // Notify theme controller to reload (dispatch custom event)
       const themeChanged = settings.theme
       if (themeChanged) {
-        window.dispatchEvent(new CustomEvent("webnotes:config-changed", {
+        window.dispatchEvent(new CustomEvent("frankmd:config-changed", {
           detail: { theme: settings.theme }
         }))
       }
@@ -1107,14 +1107,14 @@ export default class extends Controller {
     }
 
     // Dispatch event for table_editor_controller
-    window.dispatchEvent(new CustomEvent("webnotes:open-table-editor", {
+    window.dispatchEvent(new CustomEvent("frankmd:open-table-editor", {
       detail: { existingTable, startPos, endPos }
     }))
   }
 
   // Setup listener for table insertion from table_editor_controller
   setupTableEditorListener() {
-    window.addEventListener("webnotes:insert-table", this.handleTableInsert.bind(this))
+    window.addEventListener("frankmd:insert-table", this.handleTableInsert.bind(this))
   }
 
   // Handle table insertion from table_editor_controller
@@ -1972,7 +1972,7 @@ export default class extends Controller {
     }
 
     if (!this.aiImageEnabled) {
-      alert("AI image generation is not configured. Please add your Gemini API key to .webnotes")
+      alert("AI image generation is not configured. Please add your Gemini API key to .fed")
       return
     }
 
@@ -2563,7 +2563,7 @@ export default class extends Controller {
           console.warn("Failed to save config:", await response.text())
         } else {
           // Notify other controllers that config file was modified
-          window.dispatchEvent(new CustomEvent("webnotes:config-file-modified"))
+          window.dispatchEvent(new CustomEvent("frankmd:config-file-modified"))
         }
       } catch (error) {
         console.warn("Failed to save config:", error)
@@ -2571,16 +2571,16 @@ export default class extends Controller {
     }, 500)
   }
 
-  // Reload .webnotes content if it's open in the editor
+  // Reload .fed content if it's open in the editor
   async reloadCurrentConfigFile() {
     try {
-      const response = await fetch(`/notes/${this.encodePath(".webnotes")}`, {
+      const response = await fetch(`/notes/${this.encodePath(".fed")}`, {
         headers: { "Accept": "application/json" }
       })
 
       if (response.ok) {
         const data = await response.json()
-        if (this.hasTextareaTarget && this.currentFile === ".webnotes") {
+        if (this.hasTextareaTarget && this.currentFile === ".fed") {
           // Save cursor position
           const cursorPos = this.textareaTarget.selectionStart
           // Update content
@@ -2597,9 +2597,9 @@ export default class extends Controller {
 
   // Listen for config file modifications from any source (theme, settings, etc.)
   setupConfigFileListener() {
-    window.addEventListener("webnotes:config-file-modified", () => {
-      // If .webnotes is currently open in the editor, reload it
-      if (this.currentFile === ".webnotes") {
+    window.addEventListener("frankmd:config-file-modified", () => {
+      // If .fed is currently open in the editor, reload it
+      if (this.currentFile === ".fed") {
         this.reloadCurrentConfigFile()
       }
     })
@@ -3621,6 +3621,11 @@ export default class extends Controller {
       return
     }
 
+    if (!this.currentFile) {
+      alert("No file open")
+      return
+    }
+
     const text = this.textareaTarget.value
     if (!text.trim()) {
       alert("No text to check")
@@ -3638,6 +3643,11 @@ export default class extends Controller {
       <span>Processing...</span>
     `
     button.disabled = true
+
+    // Save file first if there are pending changes (server reads from disk)
+    if (this.saveTimeout) {
+      await this.saveNow()
+    }
 
     // Show processing overlay with provider/model info and disable editor
     if (this.hasAiProcessingOverlayTarget) {
@@ -3661,13 +3671,14 @@ export default class extends Controller {
     document.addEventListener("keydown", handleEscKey)
 
     try {
+      // Send just the path - server reads the file directly
       const response = await fetch("/ai/fix_grammar", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-CSRF-Token": this.csrfToken
         },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ path: this.currentFile }),
         signal: this.aiAbortController.signal
       })
 
@@ -3689,8 +3700,8 @@ export default class extends Controller {
       this.aiDiffContentTarget.classList.remove("hidden")
       this.aiDiffContentTarget.classList.add("flex")
 
-      // Compute and display diff
-      const diff = this.computeWordDiff(text, data.corrected)
+      // Compute and display diff (use original from server response)
+      const diff = this.computeWordDiff(data.original, data.corrected)
       this.aiOriginalTextTarget.innerHTML = this.renderDiffOriginal(diff)
       this.aiCorrectedDiffTarget.innerHTML = this.renderDiffCorrected(diff)
       this.aiCorrectedTextTarget.value = data.corrected

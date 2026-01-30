@@ -60,30 +60,30 @@ class NotesServiceTest < ActiveSupport::TestCase
     assert_equal "visible", tree.first[:name]
   end
 
-  test "list_tree shows .webnotes config file" do
-    @test_notes_dir.join(".webnotes").write("theme = dark")
+  test "list_tree shows .fed config file" do
+    @test_notes_dir.join(".fed").write("theme = dark")
     create_test_note("note.md")
 
     tree = @service.list_tree
     assert_equal 2, tree.length
 
-    config = tree.find { |item| item[:name] == ".webnotes" }
+    config = tree.find { |item| item[:name] == ".fed" }
     assert_not_nil config
     assert_equal "file", config[:type]
     assert_equal "config", config[:file_type]
-    assert_equal ".webnotes", config[:path]
+    assert_equal ".fed", config[:path]
   end
 
-  test "list_tree does not show .webnotes in subfolders" do
+  test "list_tree does not show .fed in subfolders" do
     create_test_folder("subfolder")
-    @test_notes_dir.join("subfolder/.webnotes").write("theme = dark")
+    @test_notes_dir.join("subfolder/.fed").write("theme = dark")
     create_test_note("subfolder/note.md")
 
     tree = @service.list_tree
     folder = tree.find { |item| item[:type] == "folder" }
     assert_not_nil folder
 
-    # .webnotes in subfolder should be ignored
+    # .fed in subfolder should be ignored
     assert_equal 1, folder[:children].length
     assert_equal "note", folder[:children].first[:name]
   end

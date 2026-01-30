@@ -10,10 +10,22 @@ class AiController < ApplicationController
 
   # POST /ai/fix_grammar
   def fix_grammar
-    text = params[:text].to_s
+    path = params[:path].to_s
+
+    if path.blank?
+      return render json: { error: "No file path provided" }, status: :bad_request
+    end
+
+    # Read the file content from disk
+    begin
+      note = Note.find(path)
+      text = note.content
+    rescue NotesService::NotFoundError
+      return render json: { error: "Note not found" }, status: :not_found
+    end
 
     if text.blank?
-      return render json: { error: "No text provided" }, status: :bad_request
+      return render json: { error: "Note is empty" }, status: :bad_request
     end
 
     result = AiService.fix_grammar(text)
@@ -22,6 +34,7 @@ class AiController < ApplicationController
       render json: { error: result[:error] }, status: :unprocessable_entity
     else
       render json: {
+        original: text,
         corrected: result[:corrected],
         provider: result[:provider],
         model: result[:model]

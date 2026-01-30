@@ -1,4 +1,4 @@
-# WebNotes Docker Compose
+# FrankMD Docker Compose
 #
 # Quick start:
 #   docker compose up -d
@@ -10,11 +10,11 @@
 #   echo "SECRET_KEY_BASE=$(openssl rand -hex 64)" >> .env
 
 services:
-  webnotes:
-    image: akitaonrails/webnotes:latest
+  frankmd:
+    image: akitaonrails/frankmd:latest
     # Or build locally:
     # build: .
-    container_name: webnotes
+    container_name: frankmd
     restart: unless-stopped
     ports:
       - "${PORT:-3000}:80"
@@ -52,12 +52,12 @@ services:
 #
 #   cloudflared:
 #     image: cloudflare/cloudflared:latest
-#     container_name: webnotes-tunnel
+#     container_name: frankmd-tunnel
 #     restart: unless-stopped
 #     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
 #     depends_on:
-#       - webnotes
+#       - frankmd
 #     # Configure tunnel in Cloudflare Zero Trust dashboard:
 #     # - Create tunnel at https://one.dash.cloudflare.com/
-#     # - Add public hostname pointing to http://webnotes:80
+#     # - Add public hostname pointing to http://frankmd:80
 #     # - Copy tunnel token to .env as CLOUDFLARE_TUNNEL_TOKEN

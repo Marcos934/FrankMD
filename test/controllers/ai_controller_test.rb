@@ -142,16 +142,40 @@ class AiControllerTest < ActionDispatch::IntegrationTest
   end
 
   # Fix grammar endpoint tests
-  test "fix_grammar returns error when text is blank" do
-    post "/ai/fix_grammar", params: { text: "" }, as: :json
+  test "fix_grammar returns error when path is blank" do
+    post "/ai/fix_grammar", params: { path: "" }, as: :json
     assert_response :bad_request
 
     data = JSON.parse(response.body)
-    assert_includes data["error"], "No text"
+    assert_includes data["error"], "No file path"
+  end
+
+  test "fix_grammar returns error when note not found" do
+    post "/ai/fix_grammar", params: { path: "nonexistent.md" }, as: :json
+    assert_response :not_found
+
+    data = JSON.parse(response.body)
+    assert_includes data["error"], "not found"
+  end
+
+  test "fix_grammar returns error when note is empty" do
+    # Create an empty note
+    note = Note.new(path: "empty.md", content: "")
+    note.save
+
+    post "/ai/fix_grammar", params: { path: "empty.md" }, as: :json
+    assert_response :bad_request
+
+    data = JSON.parse(response.body)
+    assert_includes data["error"], "empty"
   end
 
   test "fix_grammar returns error when AI not configured" do
-    post "/ai/fix_grammar", params: { text: "Hello world" }, as: :json
+    # Create a note with content
+    note = Note.new(path: "test.md", content: "Hello world")
+    note.save
+
+    post "/ai/fix_grammar", params: { path: "test.md" }, as: :json
     assert_response :unprocessable_entity
 
     data = JSON.parse(response.body)

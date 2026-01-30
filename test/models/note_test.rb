@@ -47,11 +47,11 @@ class NoteTest < ActiveSupport::TestCase
     assert_equal "deep/nested", note.directory
   end
 
-  test "Note.find works with .webnotes config file" do
-    @test_notes_dir.join(".webnotes").write("theme = dark")
-    note = Note.find(".webnotes")
+  test "Note.find works with .fed config file" do
+    @test_notes_dir.join(".fed").write("theme = dark")
+    note = Note.find(".fed")
 
-    assert_equal ".webnotes", note.path
+    assert_equal ".fed", note.path
     assert_equal "theme = dark", note.content
   end
 
@@ -66,8 +66,8 @@ class NoteTest < ActiveSupport::TestCase
     assert_equal "test.md", Note.normalize_path("test.md")
   end
 
-  test "normalize_path does not add .md to .webnotes" do
-    assert_equal ".webnotes", Note.normalize_path(".webnotes")
+  test "normalize_path does not add .md to .fed" do
+    assert_equal ".fed", Note.normalize_path(".fed")
   end
 
   test "normalize_path handles blank paths" do

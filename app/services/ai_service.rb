@@ -83,7 +83,7 @@ class AiService
 
     def image_generation_enabled?
       # Image generation requires Gemini API key (for Imagen/Nano Banana models)
-      # Check both .webnotes and ENV since image generation is independent of text provider choice
+      # Check both .fed and ENV since image generation is independent of text provider choice
       gemini_key_for_images.present?
     end
 
@@ -96,7 +96,7 @@ class AiService
     # since image generation is independent of text provider configuration
     def gemini_key_for_images
       cfg = config_instance
-      # First check .webnotes, then ENV
+      # First check .fed, then ENV
       cfg.instance_variable_get(:@values)&.dig("gemini_api_key") ||
         ENV["GEMINI_API_KEY"]
     end
@@ -328,7 +328,7 @@ class AiService
         config.ollama_api_base = nil
 
         # Now set ONLY the specific provider we're using
-        # Use get_ai to respect .webnotes override of ENV vars
+        # Use get_ai to respect .fed override of ENV vars
         case provider
         when "ollama"
           config.ollama_api_base = cfg.get_ai("ollama_api_base")

@@ -6,8 +6,8 @@ class ImagesServiceTest < ActiveSupport::TestCase
   def setup
     # Store original config
     @original_config = {
-      path: Rails.application.config.webnotes_images.path,
-      enabled: Rails.application.config.webnotes_images.enabled
+      path: Rails.application.config.frankmd_images.path,
+      enabled: Rails.application.config.frankmd_images.enabled
     }
 
     # Create temp directory for images
@@ -15,8 +15,8 @@ class ImagesServiceTest < ActiveSupport::TestCase
     FileUtils.mkdir_p(@temp_dir)
 
     # Configure images path
-    Rails.application.config.webnotes_images.path = @temp_dir.to_s
-    Rails.application.config.webnotes_images.enabled = true
+    Rails.application.config.frankmd_images.path = @temp_dir.to_s
+    Rails.application.config.frankmd_images.enabled = true
 
     # Clear memoized path
     ImagesService.instance_variable_set(:@images_path, nil)
@@ -27,8 +27,8 @@ class ImagesServiceTest < ActiveSupport::TestCase
 
     # Restore original config
     if @original_config
-      Rails.application.config.webnotes_images.path = @original_config[:path]
-      Rails.application.config.webnotes_images.enabled = @original_config[:enabled]
+      Rails.application.config.frankmd_images.path = @original_config[:path]
+      Rails.application.config.frankmd_images.enabled = @original_config[:enabled]
     end
 
     ImagesService.instance_variable_set(:@images_path, nil)
@@ -50,14 +50,14 @@ class ImagesServiceTest < ActiveSupport::TestCase
   end
 
   test "enabled? returns false when path is not set" do
-    Rails.application.config.webnotes_images.enabled = false
+    Rails.application.config.frankmd_images.enabled = false
     refute ImagesService.enabled?
   end
 
   # === list ===
 
   test "list returns empty array when disabled" do
-    Rails.application.config.webnotes_images.enabled = false
+    Rails.application.config.frankmd_images.enabled = false
     assert_equal [], ImagesService.list
   end
 

@@ -27,9 +27,9 @@ export default class extends Controller {
     this.setupConfigListener()
   }
 
-  // Listen for config changes (when .webnotes file is edited)
+  // Listen for config changes (when .fed file is edited)
   setupConfigListener() {
-    window.addEventListener("webnotes:config-changed", (event) => {
+    window.addEventListener("frankmd:config-changed", (event) => {
       const { theme } = event.detail
       if (theme && theme !== this.currentThemeId) {
         this.currentThemeId = theme
@@ -74,7 +74,7 @@ export default class extends Controller {
           console.warn("Failed to save theme config:", await response.text())
         } else {
           // Notify other controllers that config file was modified
-          window.dispatchEvent(new CustomEvent("webnotes:config-file-modified"))
+          window.dispatchEvent(new CustomEvent("frankmd:config-file-modified"))
         }
       } catch (error) {
         console.warn("Failed to save theme config:", error)

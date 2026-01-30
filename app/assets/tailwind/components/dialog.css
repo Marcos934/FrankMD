@@ -4,13 +4,16 @@
     background: rgba(0, 0, 0, 0.6);
   }
 
-  /* Center dialogs by default, biased toward top */
+  /*
+   * Robust dialog centering using native CSS centering
+   * - inset: 0 + margin: auto centers both horizontally and vertically
+   * - max-height constraints on each dialog ensure they fit within viewport
+   * - The browser handles all the math correctly regardless of dialog size
+   */
   dialog {
     position: fixed;
-    margin: 0;
-    top: 15vh;
-    left: 50%;
-    transform: translateX(-50%);
+    inset: 0;
+    margin: auto;
     background: var(--theme-bg-secondary);
     color: var(--theme-text-primary);
     border: 1px solid var(--theme-border);
@@ -21,11 +24,9 @@
     flex-direction: column;
   }
 
-  /* Dialogs that should appear near click position */
+  /* Dialogs that should appear near click position (e.g., context menus) */
   dialog.positioned {
+    inset: auto;
     margin: 0;
-    top: auto;
-    left: auto;
-    transform: none;
   }
 }

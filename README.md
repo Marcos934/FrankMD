@@ -1,10 +1,10 @@
-# WebNotes
+# <img src="public/icon.svg" width="32" height="32" alt="FrankMD icon" style="vertical-align: middle;"> FrankMD
 
-A simple, feature-rich, self-hosted markdown note-taking app built with Ruby on Rails 8. Designed for blog writers and anyone who wants a clean, distraction-free writing environment with their notes stored locally.
+**FrankMD** (Frank Markdown) is a simple, feature-rich, self-hosted markdown note-taking app built with Ruby on Rails 8. The name honors Frank Rosenblatt, inventor of the Perceptron - the pioneering neural network that laid the foundation for modern AI. **fed** (frank editor) is the command-line alias.
 
-[![GitHub](https://img.shields.io/badge/GitHub-akitaonrails%2Fwebnotes-blue?logo=github)](https://github.com/akitaonrails/webnotes)
+[![GitHub](https://img.shields.io/badge/GitHub-akitaonrails%2FFrankMD-blue?logo=github)](https://github.com/akitaonrails/FrankMD)
 
-## Why WebNotes?
+## Why FrankMD?
 
 - **No database** - Notes are plain markdown files on your filesystem
 - **Self-hosted** - Your data stays on your machine or server
@@ -57,10 +57,10 @@ A simple, feature-rich, self-hosted markdown note-taking app built with Ruby on 
 Add this function to your `~/.bashrc` or `~/.zshrc`:
 
 ```bash
-wn() {
+fed() {
   docker run --rm -p 3000:80 \
     -v "$(realpath "${1:-.}")":/rails/notes \
-    akitaonrails/webnotes:latest
+    akitaonrails/frankmd:latest
 }
 ```
 
@@ -68,10 +68,10 @@ Then reload your shell and run:
 
 ```bash
 # Open current directory as notes
-wn .
+fed .
 
 # Or open a specific directory
-wn ~/my-blog/content
+fed ~/my-blog/content
 
 # Open http://localhost:3000
 ```
@@ -83,7 +83,7 @@ Press `Ctrl+C` to stop.
 For S3 image uploads and YouTube search, export the environment variables first:
 
 ```bash
-wn() {
+fed() {
   docker run --rm -p 3000:80 \
     -v "$(realpath "${1:-.}")":/rails/notes \
     ${IMAGES_PATH:+-v "$(realpath "$IMAGES_PATH")":/rails/images -e IMAGES_PATH=/rails/images} \
@@ -106,7 +106,7 @@ wn() {
     ${GEMINI_MODEL:+-e GEMINI_MODEL="$GEMINI_MODEL"} \
     ${OPENAI_API_KEY:+-e OPENAI_API_KEY="$OPENAI_API_KEY"} \
     ${OPENAI_MODEL:+-e OPENAI_MODEL="$OPENAI_MODEL"} \
-    akitaonrails/webnotes:latest
+    akitaonrails/frankmd:latest
 }
 ```
 
@@ -163,19 +163,19 @@ To run as a persistent service:
 
 ```bash
 # Start in background
-docker run -d --name webnotes -p 3000:80 \
+docker run -d --name frankmd -p 3000:80 \
   -v ~/notes:/rails/notes \
   --restart unless-stopped \
-  akitaonrails/webnotes:latest
+  akitaonrails/frankmd:latest
 
 # Stop
-docker stop webnotes
+docker stop frankmd
 
 # Start again
-docker start webnotes
+docker start frankmd
 
 # Remove
-docker rm -f webnotes
+docker rm -f frankmd
 ```
 
 ### Using Docker Compose
@@ -184,9 +184,9 @@ For a more permanent setup, create a `docker-compose.yml`:
 
 ```yaml
 services:
-  webnotes:
-    image: akitaonrails/webnotes:latest
-    container_name: webnotes
+  frankmd:
+    image: akitaonrails/frankmd:latest
+    container_name: frankmd
     restart: unless-stopped
     ports:
       - "3000:80"
@@ -204,11 +204,11 @@ docker compose up -d
 
 ## Configuration
 
-WebNotes uses a `.webnotes` configuration file in your notes directory. This file is automatically created on first run with all options commented out as documentation.
+FrankMD uses a `.fed` configuration file in your notes directory. This file is automatically created on first run with all options commented out as documentation.
 
-### The .webnotes File
+### The .fed File
 
-When you open a notes directory for the first time, WebNotes creates a `.webnotes` configuration file with all available options commented out. You can uncomment and modify any setting:
+When you open a notes directory for the first time, FrankMD creates a `.fed` configuration file with all available options commented out. You can uncomment and modify any setting:
 
 ```ini
 # UI Settings
@@ -251,18 +251,18 @@ google_cse_id = your-cse-id
 
 This means you can:
 - Set global defaults via environment variables
-- Override per-folder using `.webnotes` (e.g., different AWS bucket for different projects)
+- Override per-folder using `.fed` (e.g., different AWS bucket for different projects)
 - UI changes (theme, font) are automatically saved to the file
 
-**Note:** AI credentials have special behavior - if ANY AI key is set in `.webnotes`, ALL AI environment variables are ignored. See [Per-Folder AI Configuration](#per-folder-ai-configuration) for details.
+**Note:** AI credentials have special behavior - if ANY AI key is set in `.fed`, ALL AI environment variables are ignored. See [Per-Folder AI Configuration](#per-folder-ai-configuration) for details.
 
-### Editing .webnotes in the App
+### Editing .fed in the App
 
-The `.webnotes` file appears in the explorer panel with a gear icon. You can click it to edit directly in WebNotes:
+The `.fed` file appears in the explorer panel with a gear icon. You can click it to edit directly in FrankMD:
 
 - The toolbar and preview panel are hidden when editing config files (they only appear for markdown files)
 - Changes are auto-saved like any other file
-- **Live reload**: When you save `.webnotes`, the UI immediately applies your changes (theme, font, etc.)
+- **Live reload**: When you save `.fed`, the UI immediately applies your changes (theme, font, etc.)
 
 ### Available Settings
 
@@ -328,7 +328,7 @@ To enable YouTube video search in the video dialog:
 |----------|-------------|
 | `YOUTUBE_API_KEY` | Your YouTube Data API key |
 
-**In-app setup:** You can also configure this directly in the `.webnotes` file:
+**In-app setup:** You can also configure this directly in the `.fed` file:
 ```ini
 youtube_api_key = your-youtube-api-key
 ```
@@ -352,7 +352,7 @@ To enable Google Images tab (in addition to the free web search):
 | `GOOGLE_API_KEY` | Your Google API key |
 | `GOOGLE_CSE_ID` | Your Custom Search Engine ID |
 
-**In-app setup:** You can also configure this directly in the `.webnotes` file:
+**In-app setup:** You can also configure this directly in the `.fed` file:
 ```ini
 google_api_key = your-google-api-key
 google_cse_id = your-custom-search-engine-id
@@ -364,7 +364,7 @@ Note: Google Custom Search has a free tier of 100 queries/day.
 
 ### Optional: AI Grammar Checking
 
-WebNotes includes an AI-powered grammar and spelling checker. Click the "AI" button in the editor toolbar to check your text. The AI will fix grammar errors, spelling mistakes, typos, and punctuation while preserving your writing style and markdown formatting.
+FrankMD includes an AI-powered grammar and spelling checker. Click the "AI" button in the editor toolbar to check your text. The AI will fix grammar errors, spelling mistakes, typos, and punctuation while preserving your writing style and markdown formatting.
 
 **Supported Providers** (priority order in auto mode):
 1. **OpenAI** - GPT models
@@ -373,7 +373,7 @@ WebNotes includes an AI-powered grammar and spelling checker. Click the "AI" but
 4. **OpenRouter** - Multiple providers, pay-per-use
 5. **Ollama** - Local, free, private
 
-When multiple providers are configured, WebNotes automatically uses the first available one in the priority order above. You can override this with `ai_provider = <provider>`.
+When multiple providers are configured, FrankMD automatically uses the first available one in the priority order above. You can override this with `ai_provider = <provider>`.
 
 #### Option 1: Ollama (Local, Free, Recommended)
 
@@ -381,7 +381,7 @@ Run AI models locally on your machine with no API costs:
 
 1. Install Ollama from [ollama.com](https://ollama.com)
 2. Pull a model: `ollama pull llama3.2:latest`
-3. Configure in `.webnotes`:
+3. Configure in `.fed`:
 
 ```ini
 ollama_api_base = http://localhost:11434
@@ -398,7 +398,7 @@ ollama_api_base = http://host.docker.internal:11434
 Access multiple AI providers through one API:
 
 1. Get an API key from [openrouter.ai](https://openrouter.ai/keys)
-2. Configure in `.webnotes`:
+2. Configure in `.fed`:
 
 ```ini
 openrouter_api_key = sk-or-...
@@ -410,7 +410,7 @@ openrouter_model = openai/gpt-4o-mini
 Use Anthropic's Claude models:
 
 1. Get an API key from [console.anthropic.com](https://console.anthropic.com/settings/keys)
-2. Configure in `.webnotes`:
+2. Configure in `.fed`:
 
 ```ini
 anthropic_api_key = sk-ant-...
@@ -422,7 +422,7 @@ anthropic_model = claude-sonnet-4-20250514
 Use Google's Gemini models:
 
 1. Get an API key from [aistudio.google.com](https://aistudio.google.com/app/apikey)
-2. Configure in `.webnotes`:
+2. Configure in `.fed`:
 
 ```ini
 gemini_api_key = ...
@@ -434,7 +434,7 @@ gemini_model = gemini-2.0-flash
 Use OpenAI's GPT models:
 
 1. Get an API key from [platform.openai.com](https://platform.openai.com/api-keys)
-2. Configure in `.webnotes`:
+2. Configure in `.fed`:
 
 ```ini
 openai_api_key = sk-...
@@ -443,7 +443,7 @@ openai_model = gpt-4o-mini
 
 #### Provider Selection
 
-By default, WebNotes uses the first configured provider in priority order (OpenAI → Anthropic → Gemini → OpenRouter → Ollama). To force a specific provider:
+By default, FrankMD uses the first configured provider in priority order (OpenAI → Anthropic → Gemini → OpenRouter → Ollama). To force a specific provider:
 
 ```ini
 ai_provider = anthropic
@@ -457,17 +457,17 @@ ai_model = claude-3-opus-20240229
 
 #### Per-Folder AI Configuration
 
-**Important:** If you set ANY AI credential in `.webnotes`, ALL AI-related environment variables are ignored for that folder. This allows per-folder AI configuration that completely overrides your global ENV settings.
+**Important:** If you set ANY AI credential in `.fed`, ALL AI-related environment variables are ignored for that folder. This allows per-folder AI configuration that completely overrides your global ENV settings.
 
-For example, if you have `OPENAI_API_KEY` and `OPENROUTER_API_KEY` set as environment variables, but add this to `.webnotes`:
+For example, if you have `OPENAI_API_KEY` and `OPENROUTER_API_KEY` set as environment variables, but add this to `.fed`:
 
 ```ini
 anthropic_api_key = sk-ant-your-key
 ```
 
-WebNotes will:
+FrankMD will:
 - Use **only** Anthropic (ignoring OpenAI and OpenRouter from ENV)
-- Pick up changes immediately when you save `.webnotes` from the editor
+- Pick up changes immediately when you save `.fed` from the editor
 
 This is useful for:
 - Using different AI providers for different projects
@@ -523,14 +523,14 @@ This mimics the experience of a typewriter where your typing position stays cons
 
 ## Hugo Blog Post Support
 
-WebNotes includes built-in support for creating Hugo-compatible blog posts. When you click the "New Note" button (or press `Ctrl+N`), you can choose between:
+FrankMD includes built-in support for creating Hugo-compatible blog posts. When you click the "New Note" button (or press `Ctrl+N`), you can choose between:
 
 - **Empty Document** - A plain markdown file
 - **Hugo Blog Post** - A properly structured Hugo post
 
 ### Hugo Post Structure
 
-When you create a Hugo blog post with a title like "My Amazing Post Title", WebNotes will:
+When you create a Hugo blog post with a title like "My Amazing Post Title", FrankMD will:
 
 1. Create the directory structure: `YYYY/MM/DD/my-amazing-post-title/`
 2. Create `index.md` inside with Hugo frontmatter:
@@ -561,7 +561,7 @@ Examples:
 
 ## Themes
 
-WebNotes supports multiple color themes:
+FrankMD supports multiple color themes:
 
 - **Light** - Clean light theme
 - **Dark** - Standard dark theme
@@ -573,7 +573,7 @@ WebNotes supports multiple color themes:
 - **Osaka** - Japanese-inspired colors
 - **Hackerman** - Matrix-style green on black
 
-Change themes from the dropdown in the top-right corner. Your preference is saved to the `.webnotes` file.
+Change themes from the dropdown in the top-right corner. Your preference is saved to the `.fed` file.
 
 ## Remote Access with Cloudflare Tunnel
 
@@ -588,13 +588,13 @@ For secure remote access without opening ports:
 
 3. Create a tunnel:
    ```bash
-   cloudflared tunnel create webnotes
+   cloudflared tunnel create frankmd
    ```
 
 4. Add to your `docker-compose.yml`:
    ```yaml
    services:
-     webnotes:
+     frankmd:
        # ... existing config ...
 
      cloudflared:
@@ -605,10 +605,10 @@ For secure remote access without opening ports:
        environment:
          - CLOUDFLARE_TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
        depends_on:
-         - webnotes
+         - frankmd
    ```
 
-5. Configure the tunnel in Cloudflare Zero Trust dashboard to point to `http://webnotes:80`
+5. Configure the tunnel in Cloudflare Zero Trust dashboard to point to `http://frankmd:80`
 
 6. Add your tunnel token to `.env`:
    ```bash
@@ -631,8 +631,8 @@ For secure remote access without opening ports:
 
 ```bash
 # Clone the repository
-git clone https://github.com/akitaonrails/webnotes.git
-cd webnotes
+git clone https://github.com/akitaonrails/FrankMD.git
+cd FrankMD
 
 # Install Ruby dependencies
 bundle install
@@ -666,7 +666,7 @@ app/
 │   ├── images_controller.rb   # Image browsing & S3 upload
 │   ├── youtube_controller.rb  # YouTube search API
 │   ├── ai_controller.rb       # AI grammar checking API
-│   └── config_controller.rb   # .webnotes configuration
+│   └── config_controller.rb   # .fed configuration
 ├── models/
 │   ├── note.rb                # Note ActiveModel
 │   ├── folder.rb              # Folder ActiveModel
@@ -694,10 +694,10 @@ app/
 
 ```bash
 # Build locally
-docker build -t webnotes .
+docker build -t frankmd .
 
 # Run locally
-docker run -p 3000:80 -v $(pwd)/notes:/rails/notes webnotes
+docker run -p 3000:80 -v $(pwd)/notes:/rails/notes frankmd
 ```
 
 ## License

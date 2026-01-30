@@ -75,13 +75,13 @@ class ImagesControllerTest < ActionDispatch::IntegrationTest
       FileUtils.mkdir_p(@temp_dir)
 
       # Store and set config
-      @saved_path = Rails.application.config.webnotes_images.path
-      @saved_enabled = Rails.application.config.webnotes_images.enabled
-      @saved_s3 = Rails.application.config.webnotes_images.s3_enabled
+      @saved_path = Rails.application.config.frankmd_images.path
+      @saved_enabled = Rails.application.config.frankmd_images.enabled
+      @saved_s3 = Rails.application.config.frankmd_images.s3_enabled
 
-      Rails.application.config.webnotes_images.path = @temp_dir.to_s
-      Rails.application.config.webnotes_images.enabled = true
-      Rails.application.config.webnotes_images.s3_enabled = false
+      Rails.application.config.frankmd_images.path = @temp_dir.to_s
+      Rails.application.config.frankmd_images.enabled = true
+      Rails.application.config.frankmd_images.s3_enabled = false
 
       ImagesService.instance_variable_set(:@images_path, nil)
     end
@@ -89,9 +89,9 @@ class ImagesControllerTest < ActionDispatch::IntegrationTest
     def teardown
       FileUtils.rm_rf(@temp_dir) if @temp_dir&.exist?
 
-      Rails.application.config.webnotes_images.path = @saved_path
-      Rails.application.config.webnotes_images.enabled = @saved_enabled
-      Rails.application.config.webnotes_images.s3_enabled = @saved_s3
+      Rails.application.config.frankmd_images.path = @saved_path
+      Rails.application.config.frankmd_images.enabled = @saved_enabled
+      Rails.application.config.frankmd_images.s3_enabled = @saved_s3
 
       ImagesService.instance_variable_set(:@images_path, nil)
     end
@@ -299,12 +299,12 @@ class ImagesControllerTest < ActionDispatch::IntegrationTest
   # Tests for disabled state
   class WithImagesDisabled < ActionDispatch::IntegrationTest
     def setup
-      @saved_enabled = Rails.application.config.webnotes_images.enabled
-      Rails.application.config.webnotes_images.enabled = false
+      @saved_enabled = Rails.application.config.frankmd_images.enabled
+      Rails.application.config.frankmd_images.enabled = false
     end
 
     def teardown
-      Rails.application.config.webnotes_images.enabled = @saved_enabled
+      Rails.application.config.frankmd_images.enabled = @saved_enabled
     end
 
     test "config returns disabled" do

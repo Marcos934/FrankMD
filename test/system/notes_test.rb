@@ -6,7 +6,7 @@ class NotesTest < ApplicationSystemTestCase
   test "visiting the home page shows the app" do
     visit root_url
 
-    assert_selector "header", text: "WebNotes"
+    assert_selector "header", text: "FrankMD"
     assert_selector "[data-app-target='fileTree']"
   end
 
@@ -521,8 +521,8 @@ class NotesTest < ApplicationSystemTestCase
 
   test "image button is hidden when images not configured" do
     # Disable images for this test
-    original_enabled = Rails.application.config.webnotes_images.enabled
-    Rails.application.config.webnotes_images.enabled = false
+    original_enabled = Rails.application.config.frankmd_images.enabled
+    Rails.application.config.frankmd_images.enabled = false
 
     create_test_note("img_test.md", "# Test")
 
@@ -532,7 +532,7 @@ class NotesTest < ApplicationSystemTestCase
     # Image button should be hidden
     assert_selector "[data-app-target='imageBtn'].hidden", visible: false
 
-    Rails.application.config.webnotes_images.enabled = original_enabled
+    Rails.application.config.frankmd_images.enabled = original_enabled
   end
 end
 
@@ -548,21 +548,21 @@ class NotesWithImagesTest < ApplicationSystemTestCase
   end
 
   def setup_test_images_dir
-    @original_path = Rails.application.config.webnotes_images.path
-    @original_enabled = Rails.application.config.webnotes_images.enabled
+    @original_path = Rails.application.config.frankmd_images.path
+    @original_enabled = Rails.application.config.frankmd_images.enabled
 
     @test_images_dir = Rails.root.join("tmp", "test_images_#{SecureRandom.hex(4)}")
     FileUtils.mkdir_p(@test_images_dir)
 
-    Rails.application.config.webnotes_images.path = @test_images_dir.to_s
-    Rails.application.config.webnotes_images.enabled = true
+    Rails.application.config.frankmd_images.path = @test_images_dir.to_s
+    Rails.application.config.frankmd_images.enabled = true
     ImagesService.instance_variable_set(:@images_path, nil)
   end
 
   def teardown_test_images_dir
     FileUtils.rm_rf(@test_images_dir) if @test_images_dir&.exist?
-    Rails.application.config.webnotes_images.path = @original_path
-    Rails.application.config.webnotes_images.enabled = @original_enabled
+    Rails.application.config.frankmd_images.path = @original_path
+    Rails.application.config.frankmd_images.enabled = @original_enabled
     ImagesService.instance_variable_set(:@images_path, nil)
   end
 

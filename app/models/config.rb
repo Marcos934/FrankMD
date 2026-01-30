@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-# Manages user configuration stored in .webnotes file at the notes root.
+# Manages user configuration stored in .fed file at the notes root.
 # Provides defaults from ENV variables that can be overridden per-folder.
 class Config
-  CONFIG_FILE = ".webnotes"
+  CONFIG_FILE = ".fed"
   CONFIG_VERSION = 2  # Increment when adding new settings
 
   # All configurable options with their defaults and types
@@ -78,7 +78,7 @@ class Config
   # This allows using Anthropic for text while Gemini handles images
   AI_PROVIDER_PRIORITY = %w[openai anthropic openrouter ollama gemini].freeze
 
-  # AI credential keys - if ANY of these are set in .webnotes, ignore ALL AI ENV vars
+  # AI credential keys - if ANY of these are set in .fed, ignore ALL AI ENV vars
   # This allows users to override their global ENV config per-folder
   # Only includes actual credentials/endpoints, not settings like ai_provider or models
   AI_CREDENTIAL_KEYS = %w[
@@ -92,9 +92,9 @@ class Config
   # Template sections for config file (used for upgrades)
   TEMPLATE_SECTIONS = [
     {
-      marker: "# WebNotes Configuration",
+      marker: "# FrankMD Configuration",
       lines: [
-        "# WebNotes Configuration",
+        "# FrankMD Configuration",
         "# Uncomment and modify values as needed.",
         "# Environment variables are used as defaults if not specified here."
       ]
@@ -284,7 +284,7 @@ class Config
     end
   end
 
-  # Check if any AI credential is explicitly set in the .webnotes file
+  # Check if any AI credential is explicitly set in the .fed file
   # When true, we ignore ALL AI-related ENV vars for credentials
   # This allows per-folder AI config that overrides global ENV settings
   def ai_configured_in_file?
@@ -292,7 +292,7 @@ class Config
   end
 
   # Get an AI-related config value
-  # If ANY AI key is in .webnotes, use ONLY file values (ignore ENV)
+  # If ANY AI key is in .fed, use ONLY file values (ignore ENV)
   # This allows users to override their ENV-based config per-folder
   def get_ai(key)
     key = key.to_s
@@ -378,7 +378,7 @@ class Config
     content = config_file_path.read
     parse_config(content)
   rescue => e
-    Rails.logger.warn("Failed to load .webnotes config: #{e.message}")
+    Rails.logger.warn("Failed to load .fed config: #{e.message}")
     @values = {}
   end
 
@@ -482,7 +482,7 @@ class Config
 
     config_file_path.write(lines.join("\n") + "\n")
   rescue => e
-    Rails.logger.error("Failed to save .webnotes config: #{e.message}")
+    Rails.logger.error("Failed to save .fed config: #{e.message}")
     false
   end
 
@@ -505,7 +505,7 @@ class Config
     lines = generate_template_lines
     config_file_path.write(lines.join("\n") + "\n")
   rescue => e
-    Rails.logger.warn("Failed to create .webnotes template: #{e.message}")
+    Rails.logger.warn("Failed to create .fed template: #{e.message}")
   end
 
   # Upgrade existing config file by adding NEW sections only
@@ -539,9 +539,9 @@ class Config
     new_lines.concat(ai_section[:lines])
 
     config_file_path.write(new_lines.join("\n") + "\n")
-    Rails.logger.info("Upgraded .webnotes config with AI/LLM section")
+    Rails.logger.info("Upgraded .fed config with AI/LLM section")
   rescue => e
-    Rails.logger.warn("Failed to upgrade .webnotes config: #{e.message}")
+    Rails.logger.warn("Failed to upgrade .fed config: #{e.message}")
   end
 
   def generate_template_lines

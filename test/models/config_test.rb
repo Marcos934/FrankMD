@@ -44,12 +44,12 @@ class ConfigTest < ActiveSupport::TestCase
   test "creates config file on initialization if it does not exist" do
     config = Config.new(base_path: @test_dir)
 
-    assert @test_dir.join(".webnotes").exist?
+    assert @test_dir.join(".fed").exist?
   end
 
   test "config file template contains all sections" do
     config = Config.new(base_path: @test_dir)
-    content = @test_dir.join(".webnotes").read
+    content = @test_dir.join(".fed").read
 
     assert_includes content, "# UI Settings"
     assert_includes content, "# theme ="
@@ -79,7 +79,7 @@ class ConfigTest < ActiveSupport::TestCase
   # === Reading from File ===
 
   test "reads values from config file" do
-    @test_dir.join(".webnotes").write(<<~CONFIG)
+    @test_dir.join(".fed").write(<<~CONFIG)
       theme = gruvbox
       editor_font = fira-code
       editor_font_size = 16
@@ -93,7 +93,7 @@ class ConfigTest < ActiveSupport::TestCase
   end
 
   test "reads boolean values correctly" do
-    @test_dir.join(".webnotes").write(<<~CONFIG)
+    @test_dir.join(".fed").write(<<~CONFIG)
       typewriter_mode = true
       sidebar_visible = false
     CONFIG
@@ -105,7 +105,7 @@ class ConfigTest < ActiveSupport::TestCase
   end
 
   test "handles quoted string values" do
-    @test_dir.join(".webnotes").write(<<~CONFIG)
+    @test_dir.join(".fed").write(<<~CONFIG)
       theme = "tokyo-night"
       editor_font = 'jetbrains-mono'
     CONFIG
@@ -117,7 +117,7 @@ class ConfigTest < ActiveSupport::TestCase
   end
 
   test "ignores comments" do
-    @test_dir.join(".webnotes").write(<<~CONFIG)
+    @test_dir.join(".fed").write(<<~CONFIG)
       # This is a comment
       theme = dark
       # editor_font = should-be-ignored
@@ -130,7 +130,7 @@ class ConfigTest < ActiveSupport::TestCase
   end
 
   test "ignores unknown keys" do
-    @test_dir.join(".webnotes").write(<<~CONFIG)
+    @test_dir.join(".fed").write(<<~CONFIG)
       unknown_key = some_value
       theme = light
     CONFIG
@@ -155,7 +155,7 @@ class ConfigTest < ActiveSupport::TestCase
 
   test "file value overrides ENV value" do
     ENV["YOUTUBE_API_KEY"] = "env-key"
-    @test_dir.join(".webnotes").write(<<~CONFIG)
+    @test_dir.join(".fed").write(<<~CONFIG)
       youtube_api_key = file-key
     CONFIG
 
@@ -190,12 +190,12 @@ class ConfigTest < ActiveSupport::TestCase
 
   test "update replaces commented line with actual value" do
     config = Config.new(base_path: @test_dir)
-    original_content = @test_dir.join(".webnotes").read
+    original_content = @test_dir.join(".fed").read
     assert_includes original_content, "# theme ="
 
     config.set(:theme, "nord")
 
-    new_content = @test_dir.join(".webnotes").read
+    new_content = @test_dir.join(".fed").read
     assert_includes new_content, "theme = nord"
     refute_includes new_content, "# theme = nord"
   end
@@ -206,7 +206,7 @@ class ConfigTest < ActiveSupport::TestCase
     config.set(:theme, "light")
     config.set(:theme, "gruvbox")
 
-    content = @test_dir.join(".webnotes").read
+    content = @test_dir.join(".fed").read
     matches = content.scan(/^theme = /)
     assert_equal 1, matches.length
   end
@@ -214,7 +214,7 @@ class ConfigTest < ActiveSupport::TestCase
   test "preserves user-customized file structure when updating" do
     # User has stripped all comments and reordered settings
     # Include an AI key placeholder to prevent upgrade from adding AI section
-    @test_dir.join(".webnotes").write(<<~CONFIG)
+    @test_dir.join(".fed").write(<<~CONFIG)
       editor_font = hack
       theme = dark
       editor_font_size = 16
@@ -224,7 +224,7 @@ class ConfigTest < ActiveSupport::TestCase
     config = Config.new(base_path: @test_dir)
     config.set(:theme, "gruvbox")
 
-    content = @test_dir.join(".webnotes").read
+    content = @test_dir.join(".fed").read
     lines = content.lines.map(&:strip).reject(&:empty?)
 
     # Should preserve user's ordering (AI placeholder is a comment so preserved)
@@ -237,7 +237,7 @@ class ConfigTest < ActiveSupport::TestCase
 
   test "does not re-add values user manually removed" do
     # Start with full config (include AI marker to prevent upgrade)
-    @test_dir.join(".webnotes").write(<<~CONFIG)
+    @test_dir.join(".fed").write(<<~CONFIG)
       theme = dark
       editor_font = hack
       editor_font_size = 18
@@ -251,7 +251,7 @@ class ConfigTest < ActiveSupport::TestCase
     assert_equal 18, config.get(:editor_font_size)
 
     # User manually removes editor_font from file
-    @test_dir.join(".webnotes").write(<<~CONFIG)
+    @test_dir.join(".fed").write(<<~CONFIG)
       theme = dark
       editor_font_size = 18
       # ai_model = placeholder
@@ -262,7 +262,7 @@ class ConfigTest < ActiveSupport::TestCase
     config2.set(:theme, "nord")
 
     # editor_font should NOT be re-added (but editor_font_size should remain)
-    content = @test_dir.join(".webnotes").read
+    content = @test_dir.join(".fed").read
     refute_includes content, "editor_font = hack"
     refute_includes content, "editor_font = cascadia"
     assert_includes content, "theme = nord"
@@ -278,12 +278,12 @@ class ConfigTest < ActiveSupport::TestCase
       editor_font = fira-code
       editor_font_size = 20
     CONFIG
-    @test_dir.join(".webnotes").write(original_content)
+    @test_dir.join(".fed").write(original_content)
 
     config = Config.new(base_path: @test_dir)
     config.set(:editor_font_size, 22)
 
-    content = @test_dir.join(".webnotes").read
+    content = @test_dir.join(".fed").read
 
     # Comments and structure preserved
     assert_includes content, "# My custom comment"
@@ -298,7 +298,7 @@ class ConfigTest < ActiveSupport::TestCase
 
   test "appends new key at end if not present in file" do
     # Include AI marker to prevent upgrade from adding AI section
-    @test_dir.join(".webnotes").write(<<~CONFIG)
+    @test_dir.join(".fed").write(<<~CONFIG)
       theme = dark
       # ai_model = placeholder
     CONFIG
@@ -306,7 +306,7 @@ class ConfigTest < ActiveSupport::TestCase
     config = Config.new(base_path: @test_dir)
     config.set(:editor_font, "hack")
 
-    content = @test_dir.join(".webnotes").read
+    content = @test_dir.join(".fed").read
     lines = content.lines.map(&:strip).reject(&:empty?)
 
     assert_equal "theme = dark", lines[0]
@@ -317,7 +317,7 @@ class ConfigTest < ActiveSupport::TestCase
   # === UI Settings ===
 
   test "ui_settings returns only UI keys" do
-    @test_dir.join(".webnotes").write(<<~CONFIG)
+    @test_dir.join(".fed").write(<<~CONFIG)
       theme = dark
       editor_font = hack
       youtube_api_key = secret
@@ -337,7 +337,7 @@ class ConfigTest < ActiveSupport::TestCase
     config = Config.new(base_path: @test_dir)
     refute config.feature_available?(:s3_upload)
 
-    @test_dir.join(".webnotes").write(<<~CONFIG)
+    @test_dir.join(".fed").write(<<~CONFIG)
       aws_access_key_id = key
       aws_secret_access_key = secret
       aws_s3_bucket = bucket
@@ -351,7 +351,7 @@ class ConfigTest < ActiveSupport::TestCase
     config = Config.new(base_path: @test_dir)
     refute config.feature_available?(:youtube_search)
 
-    @test_dir.join(".webnotes").write(<<~CONFIG)
+    @test_dir.join(".fed").write(<<~CONFIG)
       youtube_api_key = test-key
     CONFIG
 
@@ -363,7 +363,7 @@ class ConfigTest < ActiveSupport::TestCase
     config = Config.new(base_path: @test_dir)
     refute config.feature_available?(:google_search)
 
-    @test_dir.join(".webnotes").write(<<~CONFIG)
+    @test_dir.join(".fed").write(<<~CONFIG)
       google_api_key = api-key
       google_cse_id = cse-id
     CONFIG
@@ -375,7 +375,7 @@ class ConfigTest < ActiveSupport::TestCase
   # === Corrupted File Handling ===
 
   test "handles empty config file gracefully" do
-    @test_dir.join(".webnotes").write("")
+    @test_dir.join(".fed").write("")
 
     config = Config.new(base_path: @test_dir)
 
@@ -383,7 +383,7 @@ class ConfigTest < ActiveSupport::TestCase
   end
 
   test "handles malformed lines gracefully" do
-    @test_dir.join(".webnotes").write(<<~CONFIG)
+    @test_dir.join(".fed").write(<<~CONFIG)
       this is not valid
       = no key
       theme = dark
@@ -399,7 +399,7 @@ class ConfigTest < ActiveSupport::TestCase
   end
 
   test "handles binary garbage in file" do
-    @test_dir.join(".webnotes").binwrite("\x00\xFF\xFE\x00theme = dark\n")
+    @test_dir.join(".fed").binwrite("\x00\xFF\xFE\x00theme = dark\n")
 
     # Should not crash
     config = Config.new(base_path: @test_dir)
@@ -410,20 +410,20 @@ class ConfigTest < ActiveSupport::TestCase
 
   test "handles file read errors gracefully" do
     # Create directory instead of file to cause read error
-    FileUtils.rm_f(@test_dir.join(".webnotes"))
-    FileUtils.mkdir_p(@test_dir.join(".webnotes"))
+    FileUtils.rm_f(@test_dir.join(".fed"))
+    FileUtils.mkdir_p(@test_dir.join(".fed"))
 
     # Should not crash, should use defaults
     config = Config.new(base_path: @test_dir)
     assert_equal "cascadia-code", config.get(:editor_font)
   ensure
-    FileUtils.rm_rf(@test_dir.join(".webnotes"))
+    FileUtils.rm_rf(@test_dir.join(".fed"))
   end
 
   # === Type Casting ===
 
   test "casts integer values" do
-    @test_dir.join(".webnotes").write("editor_font_size = 20")
+    @test_dir.join(".fed").write("editor_font_size = 20")
 
     config = Config.new(base_path: @test_dir)
 
@@ -433,7 +433,7 @@ class ConfigTest < ActiveSupport::TestCase
 
   test "casts boolean true values" do
     ["true", "1", "yes", "on", "TRUE", "Yes"].each do |value|
-      @test_dir.join(".webnotes").write("typewriter_mode = #{value}")
+      @test_dir.join(".fed").write("typewriter_mode = #{value}")
       config = Config.new(base_path: @test_dir)
       assert_equal true, config.get(:typewriter_mode), "Expected '#{value}' to be true"
     end
@@ -441,7 +441,7 @@ class ConfigTest < ActiveSupport::TestCase
 
   test "casts boolean false values" do
     ["false", "0", "no", "off", "FALSE", "anything"].each do |value|
-      @test_dir.join(".webnotes").write("typewriter_mode = #{value}")
+      @test_dir.join(".fed").write("typewriter_mode = #{value}")
       config = Config.new(base_path: @test_dir)
       assert_equal false, config.get(:typewriter_mode), "Expected '#{value}' to be false"
     end
@@ -483,7 +483,7 @@ class ConfigTest < ActiveSupport::TestCase
     ENV["OLLAMA_API_BASE"] = "http://localhost:11434"
     ENV["OPENAI_API_KEY"] = "sk-test"
 
-    @test_dir.join(".webnotes").write("ai_provider = openai")
+    @test_dir.join(".fed").write("ai_provider = openai")
     config = Config.new(base_path: @test_dir)
 
     assert_equal "openai", config.effective_ai_provider
@@ -492,7 +492,7 @@ class ConfigTest < ActiveSupport::TestCase
   test "effective_ai_provider ignores unavailable provider" do
     ENV["OLLAMA_API_BASE"] = "http://localhost:11434"
 
-    @test_dir.join(".webnotes").write("ai_provider = openai") # OpenAI not configured
+    @test_dir.join(".fed").write("ai_provider = openai") # OpenAI not configured
     config = Config.new(base_path: @test_dir)
 
     assert_equal "ollama", config.effective_ai_provider
@@ -508,7 +508,7 @@ class ConfigTest < ActiveSupport::TestCase
   test "effective_ai_model respects global ai_model override" do
     ENV["OPENAI_API_KEY"] = "sk-test"
 
-    @test_dir.join(".webnotes").write("ai_model = gpt-4-turbo")
+    @test_dir.join(".fed").write("ai_model = gpt-4-turbo")
     config = Config.new(base_path: @test_dir)
 
     assert_equal "gpt-4-turbo", config.effective_ai_model
@@ -517,7 +517,7 @@ class ConfigTest < ActiveSupport::TestCase
   test "effective_ai_model respects provider-specific model" do
     ENV["ANTHROPIC_API_KEY"] = "sk-ant-test"
 
-    @test_dir.join(".webnotes").write("anthropic_model = claude-3-opus-20240229")
+    @test_dir.join(".fed").write("anthropic_model = claude-3-opus-20240229")
     config = Config.new(base_path: @test_dir)
 
     assert_equal "claude-3-opus-20240229", config.effective_ai_model
@@ -536,14 +536,14 @@ class ConfigTest < ActiveSupport::TestCase
   end
 
   test "ai_configured_in_file? returns true when AI credential in file" do
-    @test_dir.join(".webnotes").write("anthropic_api_key = sk-ant-test")
+    @test_dir.join(".fed").write("anthropic_api_key = sk-ant-test")
     config = Config.new(base_path: @test_dir)
 
     assert config.ai_configured_in_file?
   end
 
   test "ai_configured_in_file? returns false when only ai_provider in file" do
-    @test_dir.join(".webnotes").write("ai_provider = anthropic")
+    @test_dir.join(".fed").write("ai_provider = anthropic")
     config = Config.new(base_path: @test_dir)
 
     assert_not config.ai_configured_in_file?
@@ -555,7 +555,7 @@ class ConfigTest < ActiveSupport::TestCase
     ENV["OPENROUTER_API_KEY"] = "sk-env-openrouter"
 
     # Set only anthropic in file - this should trigger file-only mode
-    @test_dir.join(".webnotes").write("anthropic_api_key = sk-file-anthropic")
+    @test_dir.join(".fed").write("anthropic_api_key = sk-file-anthropic")
     config = Config.new(base_path: @test_dir)
 
     # File key should be returned
@@ -569,7 +569,7 @@ class ConfigTest < ActiveSupport::TestCase
     ENV["OPENAI_API_KEY"] = "sk-env-openai"
 
     # No AI credentials in file, just settings
-    @test_dir.join(".webnotes").write("theme = dark")
+    @test_dir.join(".fed").write("theme = dark")
     config = Config.new(base_path: @test_dir)
 
     # Should use ENV since no AI credentials in file
@@ -582,7 +582,7 @@ class ConfigTest < ActiveSupport::TestCase
     ENV["OPENROUTER_API_KEY"] = "sk-env-openrouter"
 
     # Set only anthropic in file
-    @test_dir.join(".webnotes").write("anthropic_api_key = sk-file-anthropic")
+    @test_dir.join(".fed").write("anthropic_api_key = sk-file-anthropic")
     config = Config.new(base_path: @test_dir)
 
     # Should select anthropic (from file) not openai (from ENV)
@@ -595,7 +595,7 @@ class ConfigTest < ActiveSupport::TestCase
   test "upgrade adds missing AI section to existing config" do
     # Create old-style config without AI section
     old_config = <<~CONFIG
-      # WebNotes Configuration
+      # FrankMD Configuration
       theme = gruvbox
       editor_font_size = 16
 
@@ -603,7 +603,7 @@ class ConfigTest < ActiveSupport::TestCase
       # images_path = /path/to/images
     CONFIG
 
-    @test_dir.join(".webnotes").write(old_config)
+    @test_dir.join(".fed").write(old_config)
 
     # Loading config should trigger upgrade
     config = Config.new(base_path: @test_dir)
@@ -613,7 +613,7 @@ class ConfigTest < ActiveSupport::TestCase
     assert_equal 16, config.get("editor_font_size")
 
     # Verify AI section was added
-    content = @test_dir.join(".webnotes").read
+    content = @test_dir.join(".fed").read
     assert_includes content, "# AI/LLM"
     assert_includes content, "ollama_api_base"
     assert_includes content, "anthropic_api_key"
@@ -629,10 +629,10 @@ class ConfigTest < ActiveSupport::TestCase
       images_path = /my/images
     CONFIG
 
-    @test_dir.join(".webnotes").write(old_config)
+    @test_dir.join(".fed").write(old_config)
     Config.new(base_path: @test_dir)
 
-    content = @test_dir.join(".webnotes").read
+    content = @test_dir.join(".fed").read
 
     # Custom content preserved
     assert_includes content, "# My custom header comment"
@@ -644,19 +644,19 @@ class ConfigTest < ActiveSupport::TestCase
   test "upgrade does not duplicate existing AI section" do
     # Create config with AI section already present
     config_with_ai = <<~CONFIG
-      # WebNotes Configuration
+      # FrankMD Configuration
       theme = dark
 
       # AI/LLM (for grammar checking)
       openai_api_key = sk-existing
     CONFIG
 
-    @test_dir.join(".webnotes").write(config_with_ai)
+    @test_dir.join(".fed").write(config_with_ai)
 
     # Loading should not add another AI section
     config = Config.new(base_path: @test_dir)
 
-    content = @test_dir.join(".webnotes").read
+    content = @test_dir.join(".fed").read
 
     # Should only have one AI section marker
     ai_section_count = content.scan(/# AI\/LLM/).count

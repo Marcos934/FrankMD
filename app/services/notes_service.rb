@@ -170,7 +170,7 @@ class NotesService
   end
 
   # Special files that are shown even though they start with a dot
-  VISIBLE_DOTFILES = %w[.webnotes].freeze
+  VISIBLE_DOTFILES = %w[.fed].freeze
 
   def build_tree(dir, relative_base = @base_path)
     entries = dir.children.sort_by { |p| [p.directory? ? 0 : 1, p.basename.to_s.downcase] }
@@ -184,7 +184,7 @@ class NotesService
         # Allow specific dotfiles at the root level
         next unless dir == @base_path && VISIBLE_DOTFILES.include?(basename)
 
-        # Show .webnotes as a config file
+        # Show .fed as a config file
         {
           name: basename,
           path: relative_path,

@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1
 
-# WebNotes - Simple, self-hosted markdown note-taking
+# FrankMD - Simple, self-hosted markdown note-taking
 #
-# Build:  docker build -t webnotes .
-# Run:    docker run -p 3000:80 -v ~/notes:/rails/notes webnotes
+# Build:  docker build -t frankmd .
+# Run:    docker run -p 3000:80 -v ~/notes:/rails/notes frankmd
 
 ARG RUBY_VERSION=3.4.1
 FROM ruby:$RUBY_VERSION-slim AS base

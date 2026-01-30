@@ -92,7 +92,7 @@ class ImagesService
         filename = full_path.basename.to_s
       end
 
-      key = "webnotes/#{Time.current.strftime('%Y/%m')}/#{filename}"
+      key = "frankmd/#{Time.current.strftime('%Y/%m')}/#{filename}"
 
       # Upload without ACL first (works with buckets that have ACLs disabled)
       begin
@@ -192,7 +192,7 @@ class ImagesService
       http.read_timeout = 30
 
       request = Net::HTTP::Get.new(uri)
-      request["User-Agent"] = "Mozilla/5.0 (compatible; WebNotes/1.0)"
+      request["User-Agent"] = "Mozilla/5.0 (compatible; FrankMD/1.0)"
 
       response = http.request(request)
 
@@ -214,7 +214,7 @@ class ImagesService
       # Process image if resize ratio provided
       if resize
         # Write to temp file for ImageMagick processing
-        temp_file = Tempfile.new([ "webnotes", extension ])
+        temp_file = Tempfile.new([ "frankmd", extension ])
         begin
           temp_file.binmode
           temp_file.write(file_content)
@@ -232,7 +232,7 @@ class ImagesService
         region: config.aws_region
       )
 
-      key = "webnotes/#{Time.current.strftime('%Y/%m')}/#{original_name}"
+      key = "frankmd/#{Time.current.strftime('%Y/%m')}/#{original_name}"
 
       begin
         client.put_object(
@@ -251,7 +251,7 @@ class ImagesService
     private
 
     def config
-      Rails.application.config.webnotes_images
+      Rails.application.config.frankmd_images
     end
 
     def find_images(search)
@@ -315,7 +315,7 @@ class ImagesService
       output_name = "#{base_name}.jpg"
 
       # Create temp file for output
-      output_file = Tempfile.new([ "webnotes_resized", ".jpg" ])
+      output_file = Tempfile.new([ "frankmd_resized", ".jpg" ])
       begin
         output_file.close
 
@@ -398,7 +398,7 @@ class ImagesService
         filename = original_filename
       end
 
-      key = "webnotes/#{Time.current.strftime('%Y/%m')}/#{filename}"
+      key = "frankmd/#{Time.current.strftime('%Y/%m')}/#{filename}"
 
       begin
         client.put_object(

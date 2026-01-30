@@ -25,11 +25,11 @@ export default class extends Controller {
     this.selectedCellCol = 0
 
     // Listen for open event from app controller
-    window.addEventListener("webnotes:open-table-editor", this.handleOpen.bind(this))
+    window.addEventListener("frankmd:open-table-editor", this.handleOpen.bind(this))
   }
 
   disconnect() {
-    window.removeEventListener("webnotes:open-table-editor", this.handleOpen.bind(this))
+    window.removeEventListener("frankmd:open-table-editor", this.handleOpen.bind(this))
   }
 
   handleOpen(event) {
@@ -222,7 +222,7 @@ export default class extends Controller {
     const markdown = this.generateMarkdownTable()
 
     // Dispatch event for app controller to handle insertion
-    window.dispatchEvent(new CustomEvent("webnotes:insert-table", {
+    window.dispatchEvent(new CustomEvent("frankmd:insert-table", {
       detail: {
         markdown,
         editMode: this.editMode,

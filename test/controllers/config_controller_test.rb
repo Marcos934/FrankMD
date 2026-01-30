@@ -53,7 +53,7 @@ class ConfigControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "show returns configured values from file" do
-    @test_notes_dir.join(".webnotes").write(<<~CONFIG)
+    @test_notes_dir.join(".fed").write(<<~CONFIG)
       theme = gruvbox
       editor_font = hack
       typewriter_mode = true
@@ -92,7 +92,7 @@ class ConfigControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
 
     # Verify not saved
-    content = @test_notes_dir.join(".webnotes").read
+    content = @test_notes_dir.join(".fed").read
     refute_includes content, "hack-attempt"
   end
 
@@ -133,20 +133,20 @@ class ConfigControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
 
     # Verify the file actually contains the new values
-    content = @test_notes_dir.join(".webnotes").read
+    content = @test_notes_dir.join(".fed").read
     assert_includes content, "editor_font = hack"
     assert_includes content, "editor_font_size = 20"
   end
 
   test "update preserves existing file content when adding new settings" do
     # Start with just theme
-    @test_notes_dir.join(".webnotes").write("theme = tokyo-night\n")
+    @test_notes_dir.join(".fed").write("theme = tokyo-night\n")
 
     # Add font settings
     patch config_url, params: { editor_font: "fira-code" }, as: :json
     assert_response :success
 
-    content = @test_notes_dir.join(".webnotes").read
+    content = @test_notes_dir.join(".fed").read
     # Original theme preserved
     assert_includes content, "theme = tokyo-night"
     # New font added
