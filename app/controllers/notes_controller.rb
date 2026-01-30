@@ -7,6 +7,7 @@ class NotesController < ApplicationController
     @tree = Note.all
     @initial_path = params[:file]
     @initial_note = load_initial_note if @initial_path.present?
+    @config = load_config
   end
 
   def tree
@@ -31,6 +32,7 @@ class NotesController < ApplicationController
     @tree = Note.all
     @initial_path = path
     @initial_note = load_initial_note
+    @config = load_config
     render :index, formats: [ :html ]
   end
 
@@ -131,5 +133,21 @@ class NotesController < ApplicationController
       exists: false,
       error: "Note not found or was deleted"
     }
+  end
+
+  def load_config
+    config = Config.new
+    {
+      settings: config.ui_settings,
+      features: {
+        s3_upload: config.feature_available?(:s3_upload),
+        youtube_search: config.feature_available?(:youtube_search),
+        google_search: config.feature_available?(:google_search),
+        local_images: config.feature_available?(:local_images)
+      }
+    }
+  rescue => e
+    Rails.logger.warn("Failed to load config: #{e.message}")
+    { settings: {}, features: {} }
   end
 end

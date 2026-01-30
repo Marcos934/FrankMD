@@ -29,6 +29,10 @@ Rails.application.routes.draw do
   get "youtube/config", to: "youtube#config"
   get "youtube/search", to: "youtube#search"
 
+  # Config API
+  get "config", to: "config#show"
+  patch "config", to: "config#update"
+
   # Health check
   get "up" => "rails/health#show", as: :rails_health_check
 end

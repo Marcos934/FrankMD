@@ -2,6 +2,7 @@ import { Controller } from "@hotwired/stimulus"
 
 export default class extends Controller {
   static targets = ["menu", "currentTheme"]
+  static values = { initial: String }
 
   // Available themes - add new themes here
   static themes = [
@@ -18,9 +19,24 @@ export default class extends Controller {
   ]
 
   connect() {
+    // Load initial theme from server config
+    this.currentThemeId = this.hasInitialValue && this.initialValue ? this.initialValue : null
     this.applyTheme()
     this.renderMenu()
     this.setupClickOutside()
+    this.setupConfigListener()
+  }
+
+  // Listen for config changes (when .webnotes file is edited)
+  setupConfigListener() {
+    window.addEventListener("webnotes:config-changed", (event) => {
+      const { theme } = event.detail
+      if (theme && theme !== this.currentThemeId) {
+        this.currentThemeId = theme
+        this.applyTheme()
+        this.renderMenu()
+      }
+    })
   }
 
   toggle(event) {
@@ -30,15 +46,45 @@ export default class extends Controller {
 
   selectTheme(event) {
     const themeId = event.currentTarget.dataset.theme
-    localStorage.setItem("theme", themeId)
+    this.currentThemeId = themeId
+    this.saveThemeConfig(themeId)
     this.applyTheme()
     this.menuTarget.classList.add("hidden")
   }
 
+  // Save theme to server config (debounced)
+  saveThemeConfig(themeId) {
+    if (this.configSaveTimeout) {
+      clearTimeout(this.configSaveTimeout)
+    }
+
+    this.configSaveTimeout = setTimeout(async () => {
+      try {
+        const response = await fetch("/config", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]')?.content
+          },
+          body: JSON.stringify({ theme: themeId })
+        })
+
+        if (!response.ok) {
+          console.warn("Failed to save theme config:", await response.text())
+        } else {
+          // Notify other controllers that config file was modified
+          window.dispatchEvent(new CustomEvent("webnotes:config-file-modified"))
+        }
+      } catch (error) {
+        console.warn("Failed to save theme config:", error)
+      }
+    }, 500)
+  }
+
   applyTheme() {
-    const savedTheme = localStorage.getItem("theme")
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches
-    const themeId = savedTheme || (prefersDark ? "dark" : "light")
+    const themeId = this.currentThemeId || (prefersDark ? "dark" : "light")
 
     // Set data-theme attribute on html element
     document.documentElement.setAttribute("data-theme", themeId)
@@ -67,7 +113,7 @@ export default class extends Controller {
   renderMenu() {
     if (!this.hasMenuTarget) return
 
-    const currentTheme = localStorage.getItem("theme") ||
+    const currentTheme = this.currentThemeId ||
       (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
 
     this.menuTarget.innerHTML = this.constructor.themes.map(theme => `

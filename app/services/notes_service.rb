@@ -169,17 +169,31 @@ class NotesService
     full_path
   end
 
+  # Special files that are shown even though they start with a dot
+  VISIBLE_DOTFILES = %w[.webnotes].freeze
+
   def build_tree(dir, relative_base = @base_path)
     entries = dir.children.sort_by { |p| [p.directory? ? 0 : 1, p.basename.to_s.downcase] }
 
     entries.filter_map do |entry|
-      next if entry.basename.to_s.start_with?(".")
-
+      basename = entry.basename.to_s
       relative_path = entry.relative_path_from(relative_base).to_s
 
-      if entry.directory?
+      # Skip hidden files except for special ones
+      if basename.start_with?(".")
+        # Allow specific dotfiles at the root level
+        next unless dir == @base_path && VISIBLE_DOTFILES.include?(basename)
+
+        # Show .webnotes as a config file
         {
-          name: entry.basename.to_s,
+          name: basename,
+          path: relative_path,
+          type: "file",
+          file_type: "config"
+        }
+      elsif entry.directory?
+        {
+          name: basename,
           path: relative_path,
           type: "folder",
           children: build_tree(entry, relative_base)
@@ -188,7 +202,8 @@ class NotesService
         {
           name: entry.basename(".md").to_s,
           path: relative_path,
-          type: "file"
+          type: "file",
+          file_type: "markdown"
         }
       end
     end

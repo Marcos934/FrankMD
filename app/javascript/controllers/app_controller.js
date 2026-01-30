@@ -110,11 +110,13 @@ export default class extends Controller {
   static values = {
     tree: Array,
     initialPath: String,
-    initialNote: Object
+    initialNote: Object,
+    config: Object
   }
 
   connect() {
     this.currentFile = null
+    this.currentFileType = null  // "markdown", "config", or null
     this.expandedFolders = new Set()
     this.saveTimeout = null
     this.contextItem = null
@@ -167,18 +169,24 @@ export default class extends Controller {
       { id: "ubuntu-mono", name: "Ubuntu Mono", family: "'Ubuntu Mono', monospace" }
     ]
     this.editorFontSizes = [12, 13, 14, 15, 16, 18, 20, 22, 24]
-    this.currentFont = localStorage.getItem("editorFont") || "cascadia-code"
-    this.currentFontSize = parseInt(localStorage.getItem("editorFontSize")) || 14
+
+    // Load settings from server config (falls back to defaults if not available)
+    const settings = this.hasConfigValue ? (this.configValue.settings || {}) : {}
+    this.currentFont = settings.editor_font || "cascadia-code"
+    this.currentFontSize = parseInt(settings.editor_font_size) || 14
 
     // Preview zoom state
     this.previewZoomLevels = [50, 75, 90, 100, 110, 125, 150, 175, 200]
-    this.previewZoom = parseInt(localStorage.getItem("previewZoom")) || 100
+    this.previewZoom = parseInt(settings.preview_zoom) || 100
 
     // Sidebar/Explorer visibility
-    this.sidebarVisible = localStorage.getItem("sidebarVisible") !== "false"
+    this.sidebarVisible = settings.sidebar_visible !== false
 
-    // Typewriter mode - keeps cursor in upper-middle area
-    this.typewriterModeEnabled = localStorage.getItem("typewriterMode") === "true"
+    // Typewriter mode - focused writing mode
+    this.typewriterModeEnabled = settings.typewriter_mode === true
+
+    // Track pending config saves to debounce
+    this.configSaveTimeout = null
 
     // File finder state
     this.allFiles = []
@@ -219,6 +227,7 @@ export default class extends Controller {
     this.applyPreviewZoom()
     this.applySidebarVisibility()
     this.applyTypewriterMode()
+    this.setupConfigFileListener()
 
     // Configure marked
     marked.setOptions({
@@ -249,9 +258,12 @@ export default class extends Controller {
       if (exists && content !== null) {
         // File exists - load it directly from server-provided data
         this.currentFile = path
-        this.currentPathTarget.textContent = path.replace(/\.md$/, "")
+        const fileType = this.getFileType(path)
+        this.currentPathTarget.textContent = fileType === "markdown"
+          ? path.replace(/\.md$/, "")
+          : path
         this.expandParentFolders(path)
-        this.showEditor(content)
+        this.showEditor(content, fileType)
         this.renderTree()
         return
       }
@@ -385,13 +397,22 @@ export default class extends Controller {
         `
       } else {
         const isSelected = this.currentFile === item.path
-        return `
-          <div class="tree-item ${isSelected ? 'selected' : ''}" draggable="true"
-            data-action="click->app#selectFile contextmenu->app#showContextMenu dragstart->app#onDragStart dragend->app#onDragEnd"
-            data-path="${this.escapeHtml(item.path)}" data-type="file">
-            <svg class="tree-icon text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        const isConfig = item.file_type === "config"
+        const icon = isConfig
+          ? `<svg class="tree-icon text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>`
+          : `<svg class="tree-icon text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
+            </svg>`
+        // Config files should not be draggable or have context menu
+        const dragAttrs = isConfig ? '' : 'draggable="true" data-action="click->app#selectFile contextmenu->app#showContextMenu dragstart->app#onDragStart dragend->app#onDragEnd"'
+        const clickAction = isConfig ? 'data-action="click->app#selectFile"' : ''
+        return `
+          <div class="tree-item ${isSelected ? 'selected' : ''}" ${isConfig ? clickAction : dragAttrs}
+            data-path="${this.escapeHtml(item.path)}" data-type="file" data-file-type="${item.file_type || 'markdown'}">
+            ${icon}
             <span class="truncate">${this.escapeHtml(item.name)}</span>
           </div>
         `
@@ -617,12 +638,17 @@ export default class extends Controller {
 
       const data = await response.json()
       this.currentFile = path
-      this.currentPathTarget.textContent = path.replace(/\.md$/, "")
+      const fileType = this.getFileType(path)
+
+      // Display path (don't strip extension for non-markdown files)
+      this.currentPathTarget.textContent = fileType === "markdown"
+        ? path.replace(/\.md$/, "")
+        : path
 
       // Expand parent folders in tree
       this.expandParentFolders(path)
 
-      this.showEditor(data.content)
+      this.showEditor(data.content, fileType)
       this.renderTree()
 
       // Update URL for bookmarkability
@@ -635,21 +661,54 @@ export default class extends Controller {
     }
   }
 
-  showEditor(content) {
+  showEditor(content, fileType = "markdown") {
+    this.currentFileType = fileType
     this.editorPlaceholderTarget.classList.add("hidden")
     this.editorTarget.classList.remove("hidden")
-    this.editorToolbarTarget.classList.remove("hidden")
-    this.editorToolbarTarget.classList.add("flex")
     this.textareaTarget.value = content
     this.textareaTarget.focus()
-    this.updatePreview()
+
+    // Only show toolbar and preview for markdown files
+    const isMarkdown = fileType === "markdown"
+
+    if (isMarkdown) {
+      this.editorToolbarTarget.classList.remove("hidden")
+      this.editorToolbarTarget.classList.add("flex")
+      this.updatePreview()
+    } else {
+      this.editorToolbarTarget.classList.add("hidden")
+      this.editorToolbarTarget.classList.remove("flex")
+      // Hide preview for non-markdown files
+      if (this.hasPreviewPanelTarget && !this.previewPanelTarget.classList.contains("hidden")) {
+        this.previewPanelTarget.classList.add("hidden")
+        this.previewPanelTarget.classList.remove("flex")
+        document.body.classList.remove("preview-visible")
+      }
+    }
+  }
+
+  // Check if current file is markdown
+  isMarkdownFile() {
+    return this.currentFileType === "markdown"
+  }
+
+  // Get file type from path
+  getFileType(path) {
+    if (!path) return null
+    if (path === ".webnotes") return "config"
+    if (path.endsWith(".md")) return "markdown"
+    return "text"
   }
 
   onTextareaInput() {
     this.scheduleAutoSave()
-    this.updatePreview()
-    this.checkTableAtCursor()
-    this.maintainTypewriterScroll()
+
+    // Only do markdown-specific processing for markdown files
+    if (this.isMarkdownFile()) {
+      this.updatePreview()
+      this.checkTableAtCursor()
+      this.maintainTypewriterScroll()
+    }
   }
 
   // Check if cursor is in a markdown table
@@ -813,6 +872,7 @@ export default class extends Controller {
     }
 
     const content = this.textareaTarget.value
+    const isConfigFile = this.currentFile === ".webnotes"
 
     try {
       const response = await fetch(`/notes/${this.encodePath(this.currentFile)}`, {
@@ -830,9 +890,61 @@ export default class extends Controller {
 
       this.showSaveStatus("Saved")
       setTimeout(() => this.showSaveStatus(""), 2000)
+
+      // If config file was saved, reload the configuration
+      if (isConfigFile) {
+        await this.reloadConfig()
+      }
     } catch (error) {
       console.error("Error saving:", error)
       this.showSaveStatus("Error saving", true)
+    }
+  }
+
+  // Reload configuration from server and apply changes
+  async reloadConfig() {
+    try {
+      const response = await fetch("/config", {
+        headers: { "Accept": "application/json" }
+      })
+
+      if (!response.ok) {
+        console.warn("Failed to reload config")
+        return
+      }
+
+      const data = await response.json()
+      const settings = data.settings || {}
+
+      // Apply UI settings
+      const oldFont = this.currentFont
+      const oldFontSize = this.currentFontSize
+      const oldZoom = this.previewZoom
+
+      this.currentFont = settings.editor_font || "cascadia-code"
+      this.currentFontSize = parseInt(settings.editor_font_size) || 14
+      this.previewZoom = parseInt(settings.preview_zoom) || 100
+
+      // Apply changes if they differ
+      if (this.currentFont !== oldFont || this.currentFontSize !== oldFontSize) {
+        this.applyEditorSettings()
+      }
+      if (this.previewZoom !== oldZoom) {
+        this.applyPreviewZoom()
+      }
+
+      // Notify theme controller to reload (dispatch custom event)
+      const themeChanged = settings.theme
+      if (themeChanged) {
+        window.dispatchEvent(new CustomEvent("webnotes:config-changed", {
+          detail: { theme: settings.theme }
+        }))
+      }
+
+      this.showSaveStatus("Config applied")
+      setTimeout(() => this.showSaveStatus(""), 2000)
+    } catch (error) {
+      console.warn("Error reloading config:", error)
     }
   }
 
@@ -845,6 +957,11 @@ export default class extends Controller {
 
   // Preview Panel
   togglePreview() {
+    // Only allow preview for markdown files
+    if (!this.isMarkdownFile()) {
+      return
+    }
+
     const isHidden = this.previewPanelTarget.classList.contains("hidden")
     this.previewPanelTarget.classList.toggle("hidden", !isHidden)
     this.previewPanelTarget.classList.toggle("flex", isHidden)
@@ -1986,9 +2103,11 @@ export default class extends Controller {
     this.currentFont = this.fontSelectTarget.value
     this.currentFontSize = parseInt(this.fontSizeSelectTarget.value)
 
-    // Save to localStorage
-    localStorage.setItem("editorFont", this.currentFont)
-    localStorage.setItem("editorFontSize", this.currentFontSize.toString())
+    // Save to server config
+    this.saveConfig({
+      editor_font: this.currentFont,
+      editor_font_size: this.currentFontSize
+    })
 
     // Apply to editor
     this.applyEditorSettings()
@@ -2004,13 +2123,79 @@ export default class extends Controller {
     }
   }
 
+  // Save config settings to server (debounced)
+  saveConfig(settings) {
+    // Clear any pending save
+    if (this.configSaveTimeout) {
+      clearTimeout(this.configSaveTimeout)
+    }
+
+    // Debounce saves to avoid excessive API calls
+    this.configSaveTimeout = setTimeout(async () => {
+      try {
+        const response = await fetch("/config", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]')?.content
+          },
+          body: JSON.stringify(settings)
+        })
+
+        if (!response.ok) {
+          console.warn("Failed to save config:", await response.text())
+        } else {
+          // Notify other controllers that config file was modified
+          window.dispatchEvent(new CustomEvent("webnotes:config-file-modified"))
+        }
+      } catch (error) {
+        console.warn("Failed to save config:", error)
+      }
+    }, 500)
+  }
+
+  // Reload .webnotes content if it's open in the editor
+  async reloadCurrentConfigFile() {
+    try {
+      const response = await fetch(`/notes/${this.encodePath(".webnotes")}`, {
+        headers: { "Accept": "application/json" }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (this.hasTextareaTarget && this.currentFile === ".webnotes") {
+          // Save cursor position
+          const cursorPos = this.textareaTarget.selectionStart
+          // Update content
+          this.textareaTarget.value = data.content || ""
+          // Restore cursor position (or end of file if content is shorter)
+          const newCursorPos = Math.min(cursorPos, this.textareaTarget.value.length)
+          this.textareaTarget.setSelectionRange(newCursorPos, newCursorPos)
+        }
+      }
+    } catch (error) {
+      console.warn("Failed to reload config file:", error)
+    }
+  }
+
+  // Listen for config file modifications from any source (theme, settings, etc.)
+  setupConfigFileListener() {
+    window.addEventListener("webnotes:config-file-modified", () => {
+      // If .webnotes is currently open in the editor, reload it
+      if (this.currentFile === ".webnotes") {
+        this.reloadCurrentConfigFile()
+      }
+    })
+  }
+
   // Preview Zoom
   zoomPreviewIn() {
     const currentIndex = this.previewZoomLevels.indexOf(this.previewZoom)
     if (currentIndex < this.previewZoomLevels.length - 1) {
       this.previewZoom = this.previewZoomLevels[currentIndex + 1]
       this.applyPreviewZoom()
-      localStorage.setItem("previewZoom", this.previewZoom.toString())
+      this.saveConfig({ preview_zoom: this.previewZoom })
     }
   }
 
@@ -2019,7 +2204,7 @@ export default class extends Controller {
     if (currentIndex > 0) {
       this.previewZoom = this.previewZoomLevels[currentIndex - 1]
       this.applyPreviewZoom()
-      localStorage.setItem("previewZoom", this.previewZoom.toString())
+      this.saveConfig({ preview_zoom: this.previewZoom })
     }
   }
 
@@ -2035,7 +2220,7 @@ export default class extends Controller {
   // Sidebar/Explorer Toggle
   toggleSidebar() {
     this.sidebarVisible = !this.sidebarVisible
-    localStorage.setItem("sidebarVisible", this.sidebarVisible.toString())
+    this.saveConfig({ sidebar_visible: this.sidebarVisible })
     this.applySidebarVisibility()
   }
 
@@ -2049,10 +2234,18 @@ export default class extends Controller {
     }
   }
 
-  // Typewriter Mode - keeps cursor at a fixed position on screen
+  // Typewriter Mode - focused writing mode
+  // OFF: explorer open, preview closed, normal scrolling
+  // ON: explorer hidden, preview open, cursor kept in middle of editor
   toggleTypewriterMode() {
+    // Only allow typewriter mode for markdown files
+    if (!this.isMarkdownFile()) {
+      this.showTemporaryMessage("Typewriter mode is only available for markdown files")
+      return
+    }
+
     this.typewriterModeEnabled = !this.typewriterModeEnabled
-    localStorage.setItem("typewriterMode", this.typewriterModeEnabled.toString())
+    this.saveConfig({ typewriter_mode: this.typewriterModeEnabled })
     this.applyTypewriterMode()
 
     // Immediately apply typewriter scroll if enabling
@@ -2061,19 +2254,64 @@ export default class extends Controller {
     }
   }
 
+  // Show a temporary message to the user (auto-dismisses)
+  showTemporaryMessage(message, duration = 2000) {
+    // Remove any existing message
+    const existing = document.querySelector(".temporary-message")
+    if (existing) existing.remove()
+
+    const el = document.createElement("div")
+    el.className = "temporary-message fixed bottom-4 left-1/2 -translate-x-1/2 bg-[var(--theme-bg-secondary)] text-[var(--theme-text-primary)] px-4 py-2 rounded-lg shadow-lg border border-[var(--theme-border)] text-sm z-50"
+    el.textContent = message
+    document.body.appendChild(el)
+
+    setTimeout(() => el.remove(), duration)
+  }
+
   applyTypewriterMode() {
     if (this.hasTextareaTarget) {
       this.textareaTarget.classList.toggle("typewriter-mode", this.typewriterModeEnabled)
     }
+
     // Update toggle button state if exists
     const typewriterBtn = this.element.querySelector("[data-typewriter-mode-btn]")
     if (typewriterBtn) {
       typewriterBtn.classList.toggle("bg-[var(--theme-bg-hover)]", this.typewriterModeEnabled)
       typewriterBtn.setAttribute("aria-pressed", this.typewriterModeEnabled.toString())
     }
+
+    // Typewriter mode controls explorer and preview visibility
+    if (this.typewriterModeEnabled) {
+      // Hide explorer
+      this.sidebarVisible = false
+      this.applySidebarVisibility()
+
+      // Show preview
+      if (this.hasPreviewPanelTarget && this.previewPanelTarget.classList.contains("hidden")) {
+        this.previewPanelTarget.classList.remove("hidden")
+        this.previewPanelTarget.classList.add("flex")
+        document.body.classList.add("preview-visible")
+        this.updatePreview()
+        setTimeout(() => this.syncPreviewScrollToCursor(), 50)
+      }
+    } else {
+      // Show explorer
+      this.sidebarVisible = true
+      this.applySidebarVisibility()
+
+      // Hide preview
+      if (this.hasPreviewPanelTarget && !this.previewPanelTarget.classList.contains("hidden")) {
+        this.previewPanelTarget.classList.add("hidden")
+        this.previewPanelTarget.classList.remove("flex")
+        document.body.classList.remove("preview-visible")
+      }
+    }
+
+    // Save sidebar visibility along with typewriter mode
+    this.saveConfig({ sidebar_visible: this.sidebarVisible })
   }
 
-  // Keep cursor at ~35% from top of the editor in typewriter mode
+  // Keep cursor at center (50%) of the editor in typewriter mode
   maintainTypewriterScroll() {
     if (!this.typewriterModeEnabled) return
     if (!this.hasTextareaTarget) return
@@ -2094,8 +2332,8 @@ export default class extends Controller {
     // Calculate cursor's vertical position (in pixels from top of content)
     const cursorY = (linesBefore - 1) * lineHeight
 
-    // Target position: 35% from top of visible area (upper-middle)
-    const targetY = textarea.clientHeight * 0.35
+    // Target position: 50% from top of visible area (center)
+    const targetY = textarea.clientHeight * 0.5
 
     // Calculate desired scroll position to put cursor at target
     const desiredScrollTop = cursorY - targetY
@@ -2120,8 +2358,8 @@ export default class extends Controller {
     const preview = this.previewContentTarget
     const lineRatio = (currentLine - 1) / (totalLines - 1)
 
-    // Target: same 35% from top position (upper-middle)
-    const targetY = preview.clientHeight * 0.35
+    // Target: same 50% from top position (center)
+    const targetY = preview.clientHeight * 0.5
     const contentHeight = preview.scrollHeight - preview.clientHeight
 
     if (contentHeight > 0) {
@@ -2345,7 +2583,7 @@ export default class extends Controller {
     // Show sidebar if hidden
     if (!this.sidebarVisible) {
       this.sidebarVisible = true
-      localStorage.setItem("sidebarVisible", "true")
+      this.saveConfig({ sidebar_visible: true })
       this.applySidebarVisibility()
     }
 
@@ -2547,7 +2785,7 @@ export default class extends Controller {
     // Show sidebar if hidden
     if (!this.sidebarVisible) {
       this.sidebarVisible = true
-      localStorage.setItem("sidebarVisible", "true")
+      this.saveConfig({ sidebar_visible: true })
       this.applySidebarVisibility()
     }
 

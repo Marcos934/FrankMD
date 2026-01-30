@@ -60,6 +60,41 @@ class NotesServiceTest < ActiveSupport::TestCase
     assert_equal "visible", tree.first[:name]
   end
 
+  test "list_tree shows .webnotes config file" do
+    @test_notes_dir.join(".webnotes").write("theme = dark")
+    create_test_note("note.md")
+
+    tree = @service.list_tree
+    assert_equal 2, tree.length
+
+    config = tree.find { |item| item[:name] == ".webnotes" }
+    assert_not_nil config
+    assert_equal "file", config[:type]
+    assert_equal "config", config[:file_type]
+    assert_equal ".webnotes", config[:path]
+  end
+
+  test "list_tree does not show .webnotes in subfolders" do
+    create_test_folder("subfolder")
+    @test_notes_dir.join("subfolder/.webnotes").write("theme = dark")
+    create_test_note("subfolder/note.md")
+
+    tree = @service.list_tree
+    folder = tree.find { |item| item[:type] == "folder" }
+    assert_not_nil folder
+
+    # .webnotes in subfolder should be ignored
+    assert_equal 1, folder[:children].length
+    assert_equal "note", folder[:children].first[:name]
+  end
+
+  test "list_tree marks markdown files with file_type" do
+    create_test_note("note.md")
+
+    tree = @service.list_tree
+    assert_equal "markdown", tree.first[:file_type]
+  end
+
   # === read ===
 
   test "read returns file content" do

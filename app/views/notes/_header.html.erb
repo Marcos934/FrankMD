@@ -1,0 +1,71 @@
+<header class="flex-none h-12 border-b border-[var(--theme-border)] flex items-center justify-between px-4 bg-[var(--theme-bg-secondary)]">
+  <div class="flex items-center gap-2">
+    <!-- Sidebar Toggle (Burger Menu) -->
+    <button
+      type="button"
+      data-action="click->app#toggleSidebar"
+      data-app-target="sidebarToggle"
+      class="p-1.5 rounded hover:bg-[var(--theme-bg-hover)] text-[var(--theme-text-muted)]"
+      title="Toggle Explorer (Ctrl+E)"
+      aria-expanded="true"
+    >
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+      </svg>
+    </button>
+    <svg class="w-5 h-5 text-[var(--theme-accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+    <span class="font-semibold text-sm">WebNotes</span>
+  </div>
+  <div class="flex items-center gap-2">
+    <button
+      type="button"
+      data-action="click->app#toggleTypewriterMode"
+      data-typewriter-mode-btn
+      class="p-1.5 rounded hover:bg-[var(--theme-bg-hover)] text-[var(--theme-text-muted)]"
+      title="Toggle Typewriter Mode (Ctrl+B)"
+      aria-pressed="false"
+    >
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" />
+      </svg>
+    </button>
+    <button
+      type="button"
+      data-action="click->app#togglePreview"
+      data-app-target="previewToggle"
+      class="p-1.5 rounded hover:bg-[var(--theme-bg-hover)] text-[var(--theme-text-muted)]"
+      title="Toggle Preview (Ctrl+Shift+P)"
+    >
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+      </svg>
+    </button>
+    <!-- Theme Picker -->
+    <div class="relative" data-controller="theme" data-theme-initial-value="<%= @config&.dig(:settings, 'theme') %>">
+      <button
+        type="button"
+        data-action="click->theme#toggle"
+        class="flex items-center gap-1.5 px-2 py-1.5 rounded hover:bg-[var(--theme-bg-hover)] text-[var(--theme-text-muted)]"
+        title="Change Theme"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+        </svg>
+        <span class="text-xs" data-theme-target="currentTheme">Light</span>
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      <!-- Theme dropdown menu -->
+      <div
+        class="hidden absolute right-0 mt-1 w-48 rounded-lg shadow-lg bg-[var(--theme-bg-secondary)] border border-[var(--theme-border)] py-1 z-50"
+        data-theme-target="menu"
+      >
+        <!-- Menu items rendered by JavaScript -->
+      </div>
+    </div>
+  </div>
+</header>

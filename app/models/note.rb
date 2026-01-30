@@ -31,9 +31,16 @@ class Note
       NotesService.new
     end
 
+    # Files that don't need .md extension added
+    SPECIAL_FILES = %w[.webnotes].freeze
+
     def normalize_path(path)
       return "" if path.blank?
       path = path.to_s
+
+      # Don't add .md to special files like .webnotes
+      return path if SPECIAL_FILES.include?(File.basename(path))
+
       path = "#{path}.md" unless path.end_with?(".md")
       path
     end

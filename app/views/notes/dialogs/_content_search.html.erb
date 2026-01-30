@@ -1,0 +1,48 @@
+<!-- Content Search Dialog (Ctrl+Shift+F) -->
+<dialog
+  class="p-0 rounded-lg shadow-xl backdrop:bg-black/50 w-[700px] max-h-[80vh]"
+  data-app-target="contentSearchDialog"
+>
+  <div class="flex flex-col max-h-[80vh]">
+    <!-- Search Input -->
+    <div class="p-3 border-b border-[var(--theme-border)]">
+      <div class="flex items-center gap-2">
+        <svg class="w-5 h-5 text-[var(--theme-text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16l2.879-2.879m0 0a3 3 0 104.243-4.242 3 3 0 00-4.243 4.242zM21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <input
+          type="text"
+          data-app-target="contentSearchInput"
+          data-action="input->app#onContentSearchInput keydown->app#onContentSearchKeydown"
+          class="flex-1 bg-transparent border-0 text-[var(--theme-text-primary)] placeholder-[var(--theme-text-muted)] focus:outline-none text-sm font-mono"
+          placeholder="Search in files (supports regex)..."
+          autocomplete="off"
+          spellcheck="false"
+        >
+        <span class="text-xs text-[var(--theme-text-faint)]">esc to close</span>
+      </div>
+      <div class="mt-1 text-xs text-[var(--theme-text-muted)]" data-app-target="contentSearchStatus">
+        Type to search in file contents (supports regex)
+      </div>
+      <div class="mt-2 text-xs text-[var(--theme-text-faint)] flex flex-wrap gap-x-4 gap-y-1">
+        <span><code class="bg-[var(--theme-bg-tertiary)] px-1 rounded">hello</code> literal text</span>
+        <span><code class="bg-[var(--theme-bg-tertiary)] px-1 rounded">hello|world</code> OR</span>
+        <span><code class="bg-[var(--theme-bg-tertiary)] px-1 rounded">hel+o</code> one or more</span>
+        <span><code class="bg-[var(--theme-bg-tertiary)] px-1 rounded">hel.*o</code> any chars</span>
+        <span><code class="bg-[var(--theme-bg-tertiary)] px-1 rounded">^hello</code> start of line</span>
+        <span><code class="bg-[var(--theme-bg-tertiary)] px-1 rounded">hello$</code> end of line</span>
+        <span><code class="bg-[var(--theme-bg-tertiary)] px-1 rounded">\d+</code> digits</span>
+        <span><code class="bg-[var(--theme-bg-tertiary)] px-1 rounded">\bword\b</code> whole word</span>
+      </div>
+    </div>
+
+    <!-- Results List -->
+    <div
+      class="flex-1 overflow-y-auto min-h-[200px] max-h-[60vh]"
+      data-app-target="contentSearchResults"
+      data-action="mousemove->app#onContentSearchMouseMove"
+    >
+      <!-- Results rendered by JavaScript -->
+    </div>
+  </div>
+</dialog>
