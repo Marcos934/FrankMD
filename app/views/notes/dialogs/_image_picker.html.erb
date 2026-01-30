@@ -1,16 +1,16 @@
 <!-- Image Picker Dialog -->
 <dialog
-  class="p-0 rounded-lg shadow-xl backdrop:bg-black/50 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 w-[700px] max-w-[90vw]"
+  class="p-0 rounded-lg shadow-xl backdrop:bg-black/50 bg-[var(--theme-bg-secondary)] border border-[var(--theme-border)] w-[700px] max-w-[90vw]"
   data-app-target="imageDialog"
 >
-  <div class="text-zinc-900 dark:text-zinc-100">
+  <div class="text-[var(--theme-text-primary)]">
     <!-- Header -->
     <div class="flex items-center justify-between px-4 pt-4">
       <h3 class="text-sm font-semibold">Insert Image</h3>
       <button
         type="button"
         data-action="click->app#closeImageDialog"
-        class="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500"
+        class="p-1 rounded hover:bg-[var(--theme-bg-hover)] text-[var(--theme-text-muted)]"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -19,13 +19,13 @@
     </div>
 
     <!-- Tabs -->
-    <div class="flex border-b border-zinc-200 dark:border-zinc-700 px-4 mt-2">
+    <div class="flex border-b border-[var(--theme-border)] px-4 mt-2">
       <button
         type="button"
         data-action="click->app#switchImageTab"
         data-tab="local"
         data-app-target="imageTabLocal"
-        class="px-4 py-2 text-sm font-medium border-b-2 border-blue-500 text-blue-600 dark:text-blue-400"
+        class="px-4 py-2 text-sm font-medium border-b-2 border-[var(--theme-accent)] text-[var(--theme-accent)]"
       >
         Local
       </button>
@@ -34,7 +34,7 @@
         data-action="click->app#switchImageTab"
         data-tab="web"
         data-app-target="imageTabWeb"
-        class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+        class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]"
       >
         Web Search
       </button>
@@ -43,7 +43,7 @@
         data-action="click->app#switchImageTab"
         data-tab="google"
         data-app-target="imageTabGoogle"
-        class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 hidden"
+        class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)] hidden"
       >
         Google
       </button>
@@ -52,7 +52,7 @@
         data-action="click->app#switchImageTab"
         data-tab="pinterest"
         data-app-target="imageTabPinterest"
-        class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+        class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]"
       >
         Pinterest
       </button>
@@ -66,7 +66,7 @@
           type="text"
           data-app-target="imageSearch"
           data-action="input->app#onImageSearch"
-          class="w-full px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          class="w-full px-3 py-2 text-sm border border-[var(--theme-border)] rounded-md bg-[var(--theme-bg-primary)] text-[var(--theme-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)]"
           placeholder="Search images by filename..."
         >
       </div>
@@ -86,14 +86,14 @@
             type="text"
             data-app-target="webImageSearch"
             data-action="keydown->app#onWebImageSearchKeydown"
-            class="flex-1 px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="flex-1 px-3 py-2 text-sm border border-[var(--theme-border)] rounded-md bg-[var(--theme-bg-primary)] text-[var(--theme-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)]"
             placeholder="Search web images..."
           >
           <button
             type="button"
             data-action="click->app#searchWebImages"
             data-app-target="webSearchBtn"
-            class="px-4 py-2 text-sm rounded-md bg-blue-500 text-white hover:bg-blue-600 flex items-center gap-1"
+            class="px-4 py-2 text-sm rounded-md bg-[var(--theme-accent)] text-[var(--theme-accent-text)] hover:bg-[var(--theme-accent-hover)] flex items-center gap-1"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -104,7 +104,7 @@
       </div>
 
       <!-- Status -->
-      <div class="mb-2 text-xs text-zinc-500 dark:text-zinc-400" data-app-target="webImageStatus">
+      <div class="mb-2 text-xs text-[var(--theme-text-muted)]" data-app-target="webImageStatus">
         Enter keywords and click Search or press Enter
       </div>
 
@@ -123,14 +123,14 @@
             type="text"
             data-app-target="googleImageSearch"
             data-action="keydown->app#onGoogleImageSearchKeydown"
-            class="flex-1 px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="flex-1 px-3 py-2 text-sm border border-[var(--theme-border)] rounded-md bg-[var(--theme-bg-primary)] text-[var(--theme-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)]"
             placeholder="Search Google Images..."
           >
           <button
             type="button"
             data-action="click->app#searchGoogleImages"
             data-app-target="googleSearchBtn"
-            class="px-4 py-2 text-sm rounded-md bg-blue-500 text-white hover:bg-blue-600 flex items-center gap-1"
+            class="px-4 py-2 text-sm rounded-md bg-[var(--theme-accent)] text-[var(--theme-accent-text)] hover:bg-[var(--theme-accent-hover)] flex items-center gap-1"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -141,7 +141,7 @@
       </div>
 
       <!-- Status -->
-      <div class="mb-2 text-xs text-zinc-500 dark:text-zinc-400" data-app-target="googleImageStatus">
+      <div class="mb-2 text-xs text-[var(--theme-text-muted)]" data-app-target="googleImageStatus">
         Enter keywords and click Search or press Enter
       </div>
 
@@ -164,14 +164,14 @@
             type="text"
             data-app-target="pinterestImageSearch"
             data-action="keydown->app#onPinterestImageSearchKeydown"
-            class="flex-1 px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="flex-1 px-3 py-2 text-sm border border-[var(--theme-border)] rounded-md bg-[var(--theme-bg-primary)] text-[var(--theme-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)]"
             placeholder="Search Pinterest..."
           >
           <button
             type="button"
             data-action="click->app#searchPinterestImages"
             data-app-target="pinterestSearchBtn"
-            class="px-4 py-2 text-sm rounded-md bg-red-500 text-white hover:bg-red-600 flex items-center gap-1"
+            class="px-4 py-2 text-sm rounded-md bg-[var(--theme-error)] text-white hover:opacity-90 flex items-center gap-1"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -182,7 +182,7 @@
       </div>
 
       <!-- Status -->
-      <div class="mb-2 text-xs text-zinc-500 dark:text-zinc-400" data-app-target="pinterestImageStatus">
+      <div class="mb-2 text-xs text-[var(--theme-text-muted)]" data-app-target="pinterestImageStatus">
         Enter keywords and click Search or press Enter
       </div>
 
@@ -193,9 +193,9 @@
     </div>
 
     <!-- Selected Image Options (shared across all tabs) -->
-    <div class="border-t border-zinc-200 dark:border-zinc-700 px-4 pt-3 hidden" data-app-target="imageOptions">
+    <div class="border-t border-[var(--theme-border)] px-4 pt-3 hidden" data-app-target="imageOptions">
       <div class="flex items-center gap-2 mb-3 text-sm">
-        <span class="text-zinc-500">Selected:</span>
+        <span class="text-[var(--theme-text-muted)]">Selected:</span>
         <span class="font-medium truncate max-w-md" data-app-target="selectedImageName"></span>
       </div>
 
@@ -203,22 +203,22 @@
       <div class="space-y-3">
         <!-- Alt Text -->
         <div>
-          <label class="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Alt Text (optional)</label>
+          <label class="block text-xs text-[var(--theme-text-muted)] mb-1">Alt Text (optional)</label>
           <input
             type="text"
             data-app-target="imageAlt"
-            class="w-full px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="w-full px-3 py-2 text-sm border border-[var(--theme-border)] rounded-md bg-[var(--theme-bg-primary)] text-[var(--theme-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)]"
             placeholder="Describe the image..."
           >
         </div>
 
         <!-- Link URL -->
         <div>
-          <label class="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Link URL (optional, makes image clickable)</label>
+          <label class="block text-xs text-[var(--theme-text-muted)] mb-1">Link URL (optional, makes image clickable)</label>
           <input
             type="text"
             data-app-target="imageLink"
-            class="w-full px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="w-full px-3 py-2 text-sm border border-[var(--theme-border)] rounded-md bg-[var(--theme-bg-primary)] text-[var(--theme-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)]"
             placeholder="https://..."
           >
         </div>
@@ -230,11 +230,11 @@
               type="checkbox"
               data-app-target="uploadToS3"
               data-action="change->app#onS3CheckboxChange"
-              class="rounded border-zinc-300 dark:border-zinc-600 text-blue-500 focus:ring-blue-500"
+              class="rounded border-[var(--theme-border)] text-[var(--theme-accent)] focus:ring-[var(--theme-accent)]"
             >
             <span>Upload to AWS S3 first</span>
           </label>
-          <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1 ml-6">
+          <p class="text-xs text-[var(--theme-text-muted)] mt-1 ml-6">
             Image will be uploaded to S3 and the URL will be used instead of local path
           </p>
           <!-- Resize option (only when S3 is checked) -->
@@ -243,14 +243,14 @@
               <span>Resize:</span>
               <select
                 data-app-target="resizeSelectLocal"
-                class="px-2 py-1 text-sm border border-zinc-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="px-2 py-1 text-sm border border-[var(--theme-border)] rounded bg-[var(--theme-bg-primary)] text-[var(--theme-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)]"
               >
                 <option value="">None (original size)</option>
                 <option value="0.25">1/4 size (25%)</option>
                 <option value="0.5" selected>1/2 size (50%)</option>
                 <option value="0.67">2/3 size (67%)</option>
               </select>
-              <span class="text-zinc-500 dark:text-zinc-400">+ compress</span>
+              <span class="text-[var(--theme-text-muted)]">+ compress</span>
             </label>
           </div>
         </div>
@@ -262,11 +262,11 @@
               type="checkbox"
               data-app-target="reuploadToS3"
               data-action="change->app#onS3ExternalCheckboxChange"
-              class="rounded border-zinc-300 dark:border-zinc-600 text-blue-500 focus:ring-blue-500"
+              class="rounded border-[var(--theme-border)] text-[var(--theme-accent)] focus:ring-[var(--theme-accent)]"
             >
             <span>Download and re-upload to AWS S3</span>
           </label>
-          <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1 ml-6">
+          <p class="text-xs text-[var(--theme-text-muted)] mt-1 ml-6">
             Image will be downloaded and uploaded to your S3, using your URL instead of the original
           </p>
           <!-- Resize option (only when S3 is checked) -->
@@ -275,14 +275,14 @@
               <span>Resize:</span>
               <select
                 data-app-target="resizeSelectExternal"
-                class="px-2 py-1 text-sm border border-zinc-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="px-2 py-1 text-sm border border-[var(--theme-border)] rounded bg-[var(--theme-bg-primary)] text-[var(--theme-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)]"
               >
                 <option value="">None (original size)</option>
                 <option value="0.25">1/4 size (25%)</option>
                 <option value="0.5" selected>1/2 size (50%)</option>
                 <option value="0.67">2/3 size (67%)</option>
               </select>
-              <span class="text-zinc-500 dark:text-zinc-400">+ compress</span>
+              <span class="text-[var(--theme-text-muted)]">+ compress</span>
             </label>
           </div>
         </div>
@@ -291,19 +291,19 @@
 
     <!-- Loading Indicator -->
     <div class="hidden items-center justify-center py-8 px-4" data-app-target="imageLoading">
-      <svg class="animate-spin w-6 h-6 text-blue-500" fill="none" viewBox="0 0 24 24">
+      <svg class="animate-spin w-6 h-6 text-[var(--theme-accent)]" fill="none" viewBox="0 0 24 24">
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
       </svg>
-      <span class="ml-2 text-sm text-zinc-500" data-app-target="imageLoadingText">Uploading to S3...</span>
+      <span class="ml-2 text-sm text-[var(--theme-text-muted)]" data-app-target="imageLoadingText">Uploading to S3...</span>
     </div>
 
     <!-- Footer -->
-    <div class="flex justify-end gap-2 px-4 pb-4 pt-4 border-t border-zinc-200 dark:border-zinc-700">
+    <div class="flex justify-end gap-2 px-4 pb-4 pt-4 border-t border-[var(--theme-border)]">
       <button
         type="button"
         data-action="click->app#closeImageDialog"
-        class="px-3 py-1.5 text-sm rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300"
+        class="px-3 py-1.5 text-sm rounded-md hover:bg-[var(--theme-bg-hover)] text-[var(--theme-text-secondary)]"
       >
         Cancel
       </button>
@@ -311,7 +311,7 @@
         type="button"
         data-action="click->app#insertImage"
         data-app-target="insertImageBtn"
-        class="px-3 py-1.5 text-sm rounded-md bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+        class="px-3 py-1.5 text-sm rounded-md bg-[var(--theme-accent)] text-[var(--theme-accent-text)] hover:bg-[var(--theme-accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
         disabled
       >
         Insert Image

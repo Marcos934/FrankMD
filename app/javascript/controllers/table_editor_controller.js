@@ -142,7 +142,7 @@ export default class extends Controller {
       for (let c = 0; c < cols; c++) {
         const value = this.tableData[r]?.[c] || ""
         const isHeader = r === 0
-        const cellClass = isHeader ? "font-semibold bg-zinc-100 dark:bg-zinc-700" : ""
+        const cellClass = isHeader ? "font-semibold bg-[var(--theme-bg-tertiary)]" : ""
         html += `
           <td class="${cellClass}" data-row="${r}" data-col="${c}" data-action="contextmenu->table-editor#showCellMenu">
             <input
@@ -151,7 +151,7 @@ export default class extends Controller {
               data-row="${r}"
               data-col="${c}"
               data-action="input->table-editor#onCellInput contextmenu->table-editor#showCellMenu"
-              class="w-full px-2 py-1 text-sm bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100"
+              class="w-full px-2 py-1 text-sm bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)] text-[var(--theme-text-primary)]"
               placeholder="${isHeader ? 'Header' : ''}"
             >
           </td>

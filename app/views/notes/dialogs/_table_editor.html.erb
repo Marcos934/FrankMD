@@ -1,17 +1,17 @@
 <!-- Table Editor Dialog -->
 <div data-controller="table-editor">
   <dialog
-    class="p-0 rounded-lg shadow-xl backdrop:bg-black/50 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 max-w-3xl"
+    class="p-0 rounded-lg shadow-xl backdrop:bg-black/50 bg-[var(--theme-bg-secondary)] border border-[var(--theme-border)] max-w-3xl"
     data-table-editor-target="dialog"
   >
-    <div class="p-4 text-zinc-900 dark:text-zinc-100">
+    <div class="p-4 text-[var(--theme-text-primary)]">
       <div class="flex items-center justify-between mb-3">
         <h3 class="text-sm font-semibold">Table Editor</h3>
         <div class="flex items-center gap-1">
           <button
             type="button"
             data-action="click->table-editor#addColumn"
-            class="p-1.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400"
+            class="p-1.5 rounded hover:bg-[var(--theme-bg-hover)] text-[var(--theme-text-muted)]"
             title="Add Column"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -21,18 +21,18 @@
           <button
             type="button"
             data-action="click->table-editor#removeColumn"
-            class="p-1.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400"
+            class="p-1.5 rounded hover:bg-[var(--theme-bg-hover)] text-[var(--theme-text-muted)]"
             title="Remove Column"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
             </svg>
           </button>
-          <div class="h-4 w-px bg-zinc-300 dark:bg-zinc-600 mx-1"></div>
+          <div class="h-4 w-px bg-[var(--theme-border)] mx-1"></div>
           <button
             type="button"
             data-action="click->table-editor#addRow"
-            class="p-1.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400"
+            class="p-1.5 rounded hover:bg-[var(--theme-bg-hover)] text-[var(--theme-text-muted)]"
             title="Add Row"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -42,7 +42,7 @@
           <button
             type="button"
             data-action="click->table-editor#removeRow"
-            class="p-1.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400"
+            class="p-1.5 rounded hover:bg-[var(--theme-bg-hover)] text-[var(--theme-text-muted)]"
             title="Remove Row"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -54,15 +54,15 @@
 
       <!-- Table Cell Context Menu -->
       <div
-        class="fixed hidden bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg py-1 min-w-[140px] z-[60] text-zinc-900 dark:text-zinc-100"
+        class="fixed hidden bg-[var(--theme-bg-secondary)] border border-[var(--theme-border)] rounded-lg shadow-lg py-1 min-w-[140px] z-[60] text-[var(--theme-text-primary)]"
         data-table-editor-target="cellMenu"
       >
-        <div class="px-2 py-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase">Column</div>
+        <div class="px-2 py-1 text-xs font-semibold text-[var(--theme-text-muted)] uppercase">Column</div>
         <button
           type="button"
           data-action="click->table-editor#moveColumnLeft"
           data-table-editor-target="moveColLeftBtn"
-          class="w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-2"
+          class="w-full px-3 py-1.5 text-left text-sm hover:bg-[var(--theme-bg-hover)] flex items-center gap-2"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
@@ -73,7 +73,7 @@
           type="button"
           data-action="click->table-editor#moveColumnRight"
           data-table-editor-target="moveColRightBtn"
-          class="w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-2"
+          class="w-full px-3 py-1.5 text-left text-sm hover:bg-[var(--theme-bg-hover)] flex items-center gap-2"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
@@ -84,20 +84,20 @@
           type="button"
           data-action="click->table-editor#deleteColumnAt"
           data-table-editor-target="deleteColBtn"
-          class="w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-2 text-red-600 dark:text-red-400"
+          class="w-full px-3 py-1.5 text-left text-sm hover:bg-[var(--theme-bg-hover)] flex items-center gap-2 text-[var(--theme-error)]"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
           Delete Column
         </button>
-        <div class="border-t border-zinc-200 dark:border-zinc-700 my-1"></div>
-        <div class="px-2 py-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase">Row</div>
+        <div class="border-t border-[var(--theme-border)] my-1"></div>
+        <div class="px-2 py-1 text-xs font-semibold text-[var(--theme-text-muted)] uppercase">Row</div>
         <button
           type="button"
           data-action="click->table-editor#moveRowUp"
           data-table-editor-target="moveRowUpBtn"
-          class="w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-2"
+          class="w-full px-3 py-1.5 text-left text-sm hover:bg-[var(--theme-bg-hover)] flex items-center gap-2"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
@@ -108,7 +108,7 @@
           type="button"
           data-action="click->table-editor#moveRowDown"
           data-table-editor-target="moveRowDownBtn"
-          class="w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-2"
+          class="w-full px-3 py-1.5 text-left text-sm hover:bg-[var(--theme-bg-hover)] flex items-center gap-2"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
@@ -119,7 +119,7 @@
           type="button"
           data-action="click->table-editor#deleteRowAt"
           data-table-editor-target="deleteRowBtn"
-          class="w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-2 text-red-600 dark:text-red-400"
+          class="w-full px-3 py-1.5 text-left text-sm hover:bg-[var(--theme-bg-hover)] flex items-center gap-2 text-[var(--theme-error)]"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -129,24 +129,24 @@
       </div>
 
       <!-- Table Grid -->
-      <div class="overflow-auto max-h-80 border border-zinc-300 dark:border-zinc-600 rounded-md" data-table-editor-target="grid">
+      <div class="overflow-auto max-h-80 border border-[var(--theme-border)] rounded-md" data-table-editor-target="grid">
         <!-- Grid will be rendered by JavaScript -->
       </div>
 
       <div class="flex items-center justify-between mt-4">
-        <span class="text-xs text-zinc-500 dark:text-zinc-400" data-table-editor-target="size">3 x 3</span>
+        <span class="text-xs text-[var(--theme-text-muted)]" data-table-editor-target="size">3 x 3</span>
         <div class="flex gap-2">
           <button
             type="button"
             data-action="click->table-editor#close"
-            class="px-3 py-1.5 text-sm rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300"
+            class="px-3 py-1.5 text-sm rounded-md hover:bg-[var(--theme-bg-hover)] text-[var(--theme-text-secondary)]"
           >
             Cancel
           </button>
           <button
             type="button"
             data-action="click->table-editor#insert"
-            class="px-3 py-1.5 text-sm rounded-md bg-blue-500 text-white hover:bg-blue-600"
+            class="px-3 py-1.5 text-sm rounded-md bg-[var(--theme-accent)] text-[var(--theme-accent-text)] hover:bg-[var(--theme-accent-hover)]"
           >
             Insert Table
           </button>

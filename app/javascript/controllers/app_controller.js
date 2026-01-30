@@ -1935,6 +1935,11 @@ export default class extends Controller {
       this.textareaTarget.classList.toggle("typewriter-mode", this.typewriterModeEnabled)
     }
 
+    // Also toggle typewriter mode class on preview content for matching padding
+    if (this.hasPreviewContentTarget) {
+      this.previewContentTarget.classList.toggle("preview-typewriter-mode", this.typewriterModeEnabled)
+    }
+
     // Update toggle button state if exists
     const typewriterBtn = this.element.querySelector("[data-typewriter-mode-btn]")
     if (typewriterBtn) {
@@ -2051,14 +2056,21 @@ export default class extends Controller {
     const preview = this.previewContentTarget
     const lineRatio = (currentLine - 1) / (totalLines - 1)
 
-    // Target: same 50% from top position (center)
-    const targetY = preview.clientHeight * 0.5
-    const contentHeight = preview.scrollHeight - preview.clientHeight
+    // In typewriter mode, preview has 50vh padding at bottom (like editor)
+    // Calculate the actual content height (excluding the padding)
+    const style = window.getComputedStyle(preview)
+    const paddingBottom = parseFloat(style.paddingBottom) || 0
+    const actualContentHeight = preview.scrollHeight - paddingBottom
 
-    if (contentHeight > 0) {
-      const desiredScroll = (lineRatio * preview.scrollHeight) - targetY
-      preview.scrollTop = Math.max(0, Math.min(contentHeight, desiredScroll))
-    }
+    // Position in the actual content based on line ratio
+    const contentPosition = lineRatio * actualContentHeight
+
+    // We want this position to appear at 50% of visible area (center)
+    const targetY = preview.clientHeight * 0.5
+    const desiredScroll = contentPosition - targetY
+
+    // Max scroll is scrollHeight - clientHeight (browser handles the limit)
+    preview.scrollTop = Math.max(0, desiredScroll)
   }
 
   // File Finder (Ctrl+P)

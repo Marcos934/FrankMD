@@ -361,6 +361,11 @@
   .editor-textarea.typewriter-mode {
     padding-bottom: 50vh !important; /* Half viewport height of empty space at bottom */
   }
+
+  /* Preview also needs padding in typewriter mode to allow centering last content */
+  .preview-typewriter-mode {
+    padding-bottom: 50vh !important;
+  }
 }
 
 /* CodeMirror theme overrides */
@@ -867,10 +872,10 @@
   /* Center dialogs by default, biased toward top */
   dialog {
     position: fixed;
-    margin: auto;
-    top: 10%;
+    margin: 0;
+    top: 15vh;
     left: 50%;
-    transform: translate(-50%, 0);
+    transform: translateX(-50%);
     background: var(--theme-bg-secondary);
     color: var(--theme-text-primary);
     border: 1px solid var(--theme-border);
