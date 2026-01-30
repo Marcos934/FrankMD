@@ -1,11 +1,11 @@
 <!-- Image Picker Dialog -->
 <dialog
-  class="p-0 rounded-lg shadow-xl backdrop:bg-black/50 bg-[var(--theme-bg-secondary)] border border-[var(--theme-border)] w-[700px] max-w-[90vw]"
+  class="p-0 rounded-lg shadow-xl backdrop:bg-black/50 bg-[var(--theme-bg-secondary)] border border-[var(--theme-border)] w-[700px] max-w-[90vw] max-h-[90vh] overflow-hidden"
   data-app-target="imageDialog"
 >
-  <div class="text-[var(--theme-text-primary)]">
+  <div class="text-[var(--theme-text-primary)] flex flex-col h-full max-h-[90vh]">
     <!-- Header -->
-    <div class="flex items-center justify-between px-4 pt-4">
+    <div class="flex-shrink-0 flex items-center justify-between px-4 pt-4">
       <h3 class="text-sm font-semibold">Insert Image</h3>
       <button
         type="button"
@@ -19,7 +19,7 @@
     </div>
 
     <!-- Tabs -->
-    <div class="flex border-b border-[var(--theme-border)] px-4 mt-2">
+    <div class="flex-shrink-0 flex border-b border-[var(--theme-border)] px-4 mt-2">
       <button
         type="button"
         data-action="click->app#switchImageTab"
@@ -65,8 +65,19 @@
       >
         Pinterest
       </button>
+      <button
+        type="button"
+        data-action="click->app#switchImageTab"
+        data-tab="ai"
+        data-app-target="imageTabAi"
+        class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]"
+      >
+        AI Generate
+      </button>
     </div>
 
+    <!-- Scrollable Content Area -->
+    <div class="flex-1 min-h-0 overflow-y-auto">
     <!-- Tab Content: Local Images (server-side images_path) -->
     <div class="p-4" data-app-target="imageLocalPanel">
       <!-- Configuration Required Notice -->
@@ -332,8 +343,166 @@
       </div>
     </div>
 
+    <!-- Tab Content: AI Image Generation -->
+    <div class="p-4 hidden" data-app-target="imageAiPanel">
+      <!-- Configuration Required Notice -->
+      <div class="hidden" data-app-target="aiImageConfigNotice">
+        <div class="p-4 bg-[var(--theme-bg-tertiary)] rounded-lg text-center">
+          <svg class="w-10 h-10 mx-auto mb-3 text-[var(--theme-text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <h4 class="text-sm font-semibold mb-2">Gemini API Key Required</h4>
+          <p class="text-xs text-[var(--theme-text-muted)] mb-3">
+            AI image generation uses Google's Imagen models and requires a Gemini API key.
+          </p>
+          <div class="text-xs text-left bg-[var(--theme-bg-primary)] p-3 rounded border border-[var(--theme-border)] mb-3">
+            <p class="mb-2"><strong>Quick setup:</strong></p>
+            <ol class="list-decimal list-inside space-y-1 text-[var(--theme-text-muted)]">
+              <li>Get an API key from <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-[var(--theme-accent)] hover:underline">aistudio.google.com</a></li>
+              <li>Edit <code class="bg-[var(--theme-code-bg)] px-1 rounded">.webnotes</code> in your notes folder</li>
+              <li>Add: <code class="bg-[var(--theme-code-bg)] px-1 rounded">gemini_api_key = YOUR_KEY</code></li>
+            </ol>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Generation Form (shown when configured) -->
+      <div data-app-target="aiImageForm" class="hidden">
+        <!-- Model Display -->
+        <div class="mb-3 text-xs text-[var(--theme-text-muted)]">
+          Model: <span data-app-target="aiImageModel" class="font-medium text-[var(--theme-text-secondary)]"></span>
+        </div>
+
+        <!-- Reference Image Section (optional) -->
+        <div class="mb-3" data-app-target="aiRefImageSection">
+          <label class="block text-xs text-[var(--theme-text-muted)] mb-1">
+            Reference image (optional) - guide the generation with an existing image
+          </label>
+
+          <!-- Selected Reference Preview -->
+          <div class="hidden mb-2 p-2 bg-[var(--theme-bg-tertiary)] rounded-lg" data-app-target="aiRefImagePreviewContainer">
+            <div class="flex items-center gap-3">
+              <img data-app-target="aiRefImagePreview" class="w-16 h-16 object-cover rounded" alt="Reference" />
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium truncate" data-app-target="aiRefImageName"></p>
+                <button
+                  type="button"
+                  data-action="click->app#clearAiRefImage"
+                  class="text-xs text-[var(--theme-error)] hover:underline"
+                >
+                  Remove reference
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Reference Image Search & Grid -->
+          <div data-app-target="aiRefImagePicker">
+            <input
+              type="text"
+              data-app-target="aiRefImageSearch"
+              data-action="input->app#onAiRefImageSearch"
+              class="w-full px-3 py-1.5 text-sm border border-[var(--theme-border)] rounded-md bg-[var(--theme-bg-primary)] text-[var(--theme-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)] mb-2"
+              placeholder="Search reference images..."
+            >
+            <div class="grid grid-cols-6 gap-1.5 max-h-[120px] overflow-y-auto" data-app-target="aiRefImageGrid">
+              <!-- Reference images will be rendered by JavaScript -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Prompt Input -->
+        <div class="mb-3">
+          <label class="block text-xs text-[var(--theme-text-muted)] mb-1">Describe the image you want to generate</label>
+          <textarea
+            data-app-target="aiImagePrompt"
+            data-action="keydown->app#onAiImagePromptKeydown"
+            class="w-full px-3 py-2 text-sm border border-[var(--theme-border)] rounded-md bg-[var(--theme-bg-primary)] text-[var(--theme-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)] resize-none"
+            rows="2"
+            placeholder="A photorealistic image of a mountain landscape at sunset with dramatic clouds..."
+          ></textarea>
+        </div>
+
+        <!-- Generate Button -->
+        <div class="mb-4">
+          <button
+            type="button"
+            data-action="click->app#generateAiImage"
+            data-app-target="aiImageGenerateBtn"
+            class="px-4 py-2 text-sm rounded-md bg-[var(--theme-accent)] text-[var(--theme-accent-text)] hover:bg-[var(--theme-accent-hover)] flex items-center gap-2"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            Generate Image
+          </button>
+        </div>
+
+        <!-- Processing Overlay -->
+        <div class="hidden" data-app-target="aiImageProcessing">
+          <div class="p-8 bg-[var(--theme-bg-tertiary)] rounded-lg text-center">
+            <svg class="animate-spin w-8 h-8 mx-auto mb-3 text-[var(--theme-accent)]" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p class="text-sm text-[var(--theme-text-secondary)] mb-1">Generating image with <span data-app-target="aiImageProcessingModel" class="font-medium text-[var(--theme-accent)]"></span></p>
+            <p class="text-xs text-[var(--theme-text-muted)]">Press <kbd class="px-1.5 py-0.5 rounded bg-[var(--theme-bg-primary)] text-[var(--theme-text-primary)] font-mono">ESC</kbd> to cancel</p>
+          </div>
+        </div>
+
+        <!-- Generated Image Preview -->
+        <div class="hidden" data-app-target="aiImageResult">
+          <div class="flex gap-4">
+            <!-- Image Preview (left side) -->
+            <div class="flex-shrink-0">
+              <label class="block text-xs text-[var(--theme-text-muted)] mb-1">Generated Image</label>
+              <div class="border border-[var(--theme-border)] rounded-lg overflow-hidden bg-[var(--theme-bg-tertiary)]">
+                <img data-app-target="aiImagePreview" class="max-w-[200px] max-h-[150px] object-contain" alt="Generated image" />
+              </div>
+            </div>
+
+            <!-- Options (right side) -->
+            <div class="flex-1 min-w-0">
+              <!-- Revised Prompt (if available) -->
+              <div class="hidden mb-3" data-app-target="aiImageRevisedPromptContainer">
+                <label class="block text-xs text-[var(--theme-text-muted)] mb-1">AI-revised prompt</label>
+                <p class="text-xs text-[var(--theme-text-secondary)] bg-[var(--theme-bg-tertiary)] p-2 rounded line-clamp-2" data-app-target="aiImageRevisedPrompt"></p>
+              </div>
+
+              <!-- Save Options -->
+              <div class="space-y-2">
+                <label class="block text-xs text-[var(--theme-text-muted)] mb-1">Save to:</label>
+                <label class="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    name="aiImageSaveOption"
+                    value="local"
+                    checked
+                    data-app-target="aiImageSaveLocal"
+                    class="text-[var(--theme-accent)] focus:ring-[var(--theme-accent)]"
+                  >
+                  <span>notes/images/ directory</span>
+                </label>
+                <label class="flex items-center gap-2 text-sm cursor-pointer" data-app-target="aiImageS3OptionContainer">
+                  <input
+                    type="radio"
+                    name="aiImageSaveOption"
+                    value="s3"
+                    data-app-target="aiImageSaveS3"
+                    class="text-[var(--theme-accent)] focus:ring-[var(--theme-accent)]"
+                  >
+                  <span>AWS S3</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div><!-- End Scrollable Content Area -->
+
     <!-- Selected Image Options (shared across all tabs) -->
-    <div class="border-t border-[var(--theme-border)] px-4 pt-3 hidden" data-app-target="imageOptions">
+    <div class="flex-shrink-0 border-t border-[var(--theme-border)] px-4 pt-3 hidden max-h-[200px] overflow-y-auto" data-app-target="imageOptions">
       <div class="flex items-center gap-2 mb-3 text-sm">
         <span class="text-[var(--theme-text-muted)]">Selected:</span>
         <span class="font-medium truncate max-w-md" data-app-target="selectedImageName"></span>
@@ -462,7 +631,7 @@
     </div>
 
     <!-- Loading Indicator -->
-    <div class="hidden items-center justify-center py-8 px-4" data-app-target="imageLoading">
+    <div class="flex-shrink-0 hidden items-center justify-center py-8 px-4" data-app-target="imageLoading">
       <svg class="animate-spin w-6 h-6 text-[var(--theme-accent)]" fill="none" viewBox="0 0 24 24">
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -471,7 +640,7 @@
     </div>
 
     <!-- Footer -->
-    <div class="flex justify-end gap-2 px-4 pb-4 pt-4 border-t border-[var(--theme-border)]">
+    <div class="flex-shrink-0 flex justify-end gap-2 px-4 pb-4 pt-4 border-t border-[var(--theme-border)]">
       <button
         type="button"
         data-action="click->app#closeImageDialog"

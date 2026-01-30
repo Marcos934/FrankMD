@@ -57,6 +57,29 @@ export default class extends Controller {
     "pinterestSearchBtn",
     "pinterestImageStatus",
     "pinterestImageGrid",
+    "imageTabAi",
+    "imageAiPanel",
+    "aiImageConfigNotice",
+    "aiImageForm",
+    "aiImageModel",
+    "aiImagePrompt",
+    "aiImageGenerateBtn",
+    "aiImageProcessing",
+    "aiImageProcessingModel",
+    "aiImageResult",
+    "aiImagePreview",
+    "aiImageRevisedPromptContainer",
+    "aiImageRevisedPrompt",
+    "aiImageSaveLocal",
+    "aiImageSaveS3",
+    "aiImageS3OptionContainer",
+    "aiRefImageSection",
+    "aiRefImagePreviewContainer",
+    "aiRefImagePreview",
+    "aiRefImageName",
+    "aiRefImagePicker",
+    "aiRefImageSearch",
+    "aiRefImageGrid",
     "s3ExternalOption",
     "reuploadToS3",
     "resizeOptionLocal",
@@ -152,6 +175,12 @@ export default class extends Controller {
     this.webSearchEnabled = false
     this.googleImagesEnabled = false
     this.pinterestEnabled = false
+    this.aiImageEnabled = false
+    this.aiImageModel = null
+    this.generatedImageData = null
+    this.aiImageAbortController = null
+    this.aiRefImage = null  // Selected reference image for AI generation
+    this.aiRefImageSearchTimeout = null
     this.selectedImage = null
     this.imageSearchTimeout = null
     this.currentImageTab = "local"
@@ -1138,6 +1167,20 @@ export default class extends Controller {
         this.imageBtnTarget.classList.remove("hidden")
       }
     }
+
+    // Also load AI image generation config
+    try {
+      const aiResponse = await fetch("/ai/image_config", {
+        headers: { "Accept": "application/json" }
+      })
+      if (aiResponse.ok) {
+        const aiConfig = await aiResponse.json()
+        this.aiImageEnabled = aiConfig.enabled
+        this.aiImageModel = aiConfig.model
+      }
+    } catch (error) {
+      console.error("Error loading AI image config:", error)
+    }
   }
 
   async openImagePicker() {
@@ -1177,6 +1220,25 @@ export default class extends Controller {
     }
     this.pinterestImageResults = []
 
+    // Reset AI Image Generation tab
+    if (this.hasAiImagePromptTarget) this.aiImagePromptTarget.value = ""
+    if (this.hasAiImageProcessingTarget) this.aiImageProcessingTarget.classList.add("hidden")
+    if (this.hasAiImageResultTarget) this.aiImageResultTarget.classList.add("hidden")
+    if (this.hasAiImageGenerateBtnTarget) this.aiImageGenerateBtnTarget.disabled = false
+    if (this.hasAiImageSaveLocalTarget) this.aiImageSaveLocalTarget.checked = true
+    this.generatedImageData = null
+    // Reset reference image
+    this.aiRefImage = null
+    if (this.hasAiRefImageSearchTarget) this.aiRefImageSearchTarget.value = ""
+    if (this.hasAiRefImagePreviewContainerTarget) this.aiRefImagePreviewContainerTarget.classList.add("hidden")
+    if (this.hasAiRefImagePickerTarget) this.aiRefImagePickerTarget.classList.remove("hidden")
+    if (this.hasAiRefImageGridTarget) this.aiRefImageGridTarget.innerHTML = ""
+    // Abort any pending AI image generation
+    if (this.aiImageAbortController) {
+      this.aiImageAbortController.abort()
+      this.aiImageAbortController = null
+    }
+
     // Hide all S3 options initially
     if (this.hasS3OptionTarget) this.s3OptionTarget.classList.add("hidden")
     if (this.hasS3ExternalOptionTarget) this.s3ExternalOptionTarget.classList.add("hidden")
@@ -1192,6 +1254,24 @@ export default class extends Controller {
     if (this.hasGoogleImagesConfigNoticeTarget && this.hasGoogleImagesFormTarget) {
       this.googleImagesConfigNoticeTarget.classList.toggle("hidden", this.googleImagesEnabled)
       this.googleImagesFormTarget.classList.toggle("hidden", !this.googleImagesEnabled)
+    }
+
+    // Show/hide AI image generation config notice
+    if (this.hasAiImageConfigNoticeTarget && this.hasAiImageFormTarget) {
+      this.aiImageConfigNoticeTarget.classList.toggle("hidden", this.aiImageEnabled)
+      this.aiImageFormTarget.classList.toggle("hidden", !this.aiImageEnabled)
+    }
+    // Show/hide S3 option for AI images
+    if (this.hasAiImageS3OptionContainerTarget) {
+      this.aiImageS3OptionContainerTarget.classList.toggle("hidden", !this.s3Enabled)
+    }
+    // Update model display
+    if (this.hasAiImageModelTarget && this.aiImageModel) {
+      this.aiImageModelTarget.textContent = this.aiImageModel
+    }
+    // Show/hide reference image section based on whether images are enabled
+    if (this.hasAiRefImageSectionTarget) {
+      this.aiRefImageSectionTarget.classList.toggle("hidden", !this.imagesEnabled)
     }
 
     // Set initial tab - always show local first (folder picker always available)
@@ -1656,6 +1736,9 @@ export default class extends Controller {
     if (this.hasImageTabPinterestTarget) {
       this.imageTabPinterestTarget.className = `px-4 py-2 text-sm font-medium border-b-2 ${tab === "pinterest" ? activeClasses : inactiveClasses}`
     }
+    if (this.hasImageTabAiTarget) {
+      this.imageTabAiTarget.className = `px-4 py-2 text-sm font-medium border-b-2 ${tab === "ai" ? activeClasses : inactiveClasses}`
+    }
 
     // Show/hide panels
     if (this.hasImageLocalPanelTarget) {
@@ -1673,6 +1756,9 @@ export default class extends Controller {
     if (this.hasImagePinterestPanelTarget) {
       this.imagePinterestPanelTarget.classList.toggle("hidden", tab !== "pinterest")
     }
+    if (this.hasImageAiPanelTarget) {
+      this.imageAiPanelTarget.classList.toggle("hidden", tab !== "ai")
+    }
 
     // Focus appropriate input (only if the feature is configured)
     if (tab === "local" && this.hasImageSearchTarget && this.imagesEnabled) {
@@ -1683,6 +1769,12 @@ export default class extends Controller {
       this.googleImageSearchTarget.focus()
     } else if (tab === "pinterest" && this.hasPinterestImageSearchTarget) {
       this.pinterestImageSearchTarget.focus()
+    } else if (tab === "ai" && this.hasAiImagePromptTarget && this.aiImageEnabled) {
+      this.aiImagePromptTarget.focus()
+      // Load reference images if images are enabled and grid is empty
+      if (this.imagesEnabled && this.hasAiRefImageGridTarget && !this.aiRefImageGridTarget.innerHTML.trim()) {
+        this.loadAiRefImages()
+      }
     }
   }
 
@@ -1848,6 +1940,247 @@ export default class extends Controller {
     }
   }
 
+  // AI Image Generation
+  onAiImagePromptKeydown(event) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault()
+      this.generateAiImage()
+    }
+  }
+
+  async generateAiImage() {
+    const prompt = this.aiImagePromptTarget.value.trim()
+
+    if (!prompt) {
+      alert("Please enter a prompt describing the image you want to generate")
+      return
+    }
+
+    if (!this.aiImageEnabled) {
+      alert("AI image generation is not configured. Please add your Gemini API key to .webnotes")
+      return
+    }
+
+    // Create abort controller for cancellation
+    this.aiImageAbortController = new AbortController()
+
+    // Show processing state
+    if (this.hasAiImageProcessingTarget) {
+      this.aiImageProcessingTarget.classList.remove("hidden")
+    }
+    if (this.hasAiImageProcessingModelTarget) {
+      this.aiImageProcessingModelTarget.textContent = this.aiImageModel || "imagen-4.0-generate-001"
+    }
+    if (this.hasAiImageGenerateBtnTarget) {
+      this.aiImageGenerateBtnTarget.disabled = true
+    }
+    if (this.hasAiImageResultTarget) {
+      this.aiImageResultTarget.classList.add("hidden")
+    }
+
+    // Add ESC key listener for cancellation
+    const escHandler = (e) => {
+      if (e.key === "Escape") {
+        this.aiImageAbortController?.abort()
+      }
+    }
+    document.addEventListener("keydown", escHandler)
+
+    try {
+      // Build request body with optional reference image
+      const requestBody = { prompt }
+      if (this.aiRefImage?.path) {
+        requestBody.reference_image_path = this.aiRefImage.path
+      }
+
+      const response = await fetch("/ai/generate_image", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": this.csrfToken
+        },
+        body: JSON.stringify(requestBody),
+        signal: this.aiImageAbortController.signal
+      })
+
+      const data = await response.json()
+
+      if (data.error) {
+        alert(`AI Error: ${data.error}`)
+        return
+      }
+
+      // Store generated image data
+      this.generatedImageData = {
+        data: data.data,
+        url: data.url,
+        mime_type: data.mime_type,
+        model: data.model,
+        revised_prompt: data.revised_prompt
+      }
+
+      // Show result
+      if (this.hasAiImagePreviewTarget) {
+        if (data.data) {
+          // Base64 image
+          this.aiImagePreviewTarget.src = `data:${data.mime_type || 'image/png'};base64,${data.data}`
+        } else if (data.url) {
+          // URL image
+          this.aiImagePreviewTarget.src = data.url
+        }
+      }
+
+      // Show revised prompt if available
+      if (this.hasAiImageRevisedPromptContainerTarget && this.hasAiImageRevisedPromptTarget) {
+        if (data.revised_prompt) {
+          this.aiImageRevisedPromptTarget.textContent = data.revised_prompt
+          this.aiImageRevisedPromptContainerTarget.classList.remove("hidden")
+        } else {
+          this.aiImageRevisedPromptContainerTarget.classList.add("hidden")
+        }
+      }
+
+      // Show result panel
+      if (this.hasAiImageResultTarget) {
+        this.aiImageResultTarget.classList.remove("hidden")
+      }
+
+      // Enable the insert button - we now have an image selected
+      this.selectedImage = {
+        type: "ai-generated",
+        name: `ai_${Date.now()}.png`,
+        title: prompt.substring(0, 50)
+      }
+      this.imageOptionsTarget.classList.remove("hidden")
+      this.selectedImageNameTarget.textContent = "AI Generated Image"
+      this.insertImageBtnTarget.disabled = false
+
+      // Hide S3 options for other tabs, we use the AI-specific save options
+      if (this.hasS3OptionTarget) this.s3OptionTarget.classList.add("hidden")
+      if (this.hasS3ExternalOptionTarget) this.s3ExternalOptionTarget.classList.add("hidden")
+      if (this.hasS3FolderOptionTarget) this.s3FolderOptionTarget.classList.add("hidden")
+
+      // Pre-fill alt text with the prompt (truncated)
+      const altText = prompt.length > 100 ? prompt.substring(0, 100) + "..." : prompt
+      this.imageAltTarget.value = altText
+
+    } catch (error) {
+      if (error.name === "AbortError") {
+        console.log("AI image generation cancelled by user")
+      } else {
+        console.error("AI image generation error:", error)
+        alert("Failed to generate image. Please try again.")
+      }
+    } finally {
+      document.removeEventListener("keydown", escHandler)
+      this.aiImageAbortController = null
+
+      // Hide processing state
+      if (this.hasAiImageProcessingTarget) {
+        this.aiImageProcessingTarget.classList.add("hidden")
+      }
+      if (this.hasAiImageGenerateBtnTarget) {
+        this.aiImageGenerateBtnTarget.disabled = false
+      }
+    }
+  }
+
+  // AI Reference Image Methods
+  async loadAiRefImages(search = "") {
+    if (!this.imagesEnabled || !this.hasAiRefImageGridTarget) return
+
+    try {
+      const url = search ? `/images?search=${encodeURIComponent(search)}` : "/images"
+      const response = await fetch(url, {
+        headers: { "Accept": "application/json" }
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to load images")
+      }
+
+      const images = await response.json()
+      this.renderAiRefImageGrid(images)
+    } catch (error) {
+      console.error("Error loading reference images:", error)
+      this.aiRefImageGridTarget.innerHTML = '<div class="col-span-6 text-center text-[var(--theme-text-muted)] py-4 text-xs">Error loading images</div>'
+    }
+  }
+
+  renderAiRefImageGrid(images) {
+    if (!images || images.length === 0) {
+      this.aiRefImageGridTarget.innerHTML = '<div class="col-span-6 text-center text-[var(--theme-text-muted)] py-4 text-xs">No images found</div>'
+      return
+    }
+
+    const html = images.map(image => `
+      <button
+        type="button"
+        class="aspect-square rounded overflow-hidden bg-[var(--theme-bg-tertiary)] hover:ring-2 hover:ring-[var(--theme-accent)] transition-all focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)] ${this.aiRefImage?.path === image.path ? 'ring-2 ring-[var(--theme-accent)]' : ''}"
+        data-action="click->app#selectAiRefImage"
+        data-path="${this.escapeHtml(image.path)}"
+        data-name="${this.escapeHtml(image.name)}"
+        title="${this.escapeHtml(image.name)}"
+      >
+        <img src="/images/preview/${this.encodePath(image.path)}" alt="${this.escapeHtml(image.name)}" class="w-full h-full object-cover" loading="lazy">
+      </button>
+    `).join("")
+
+    this.aiRefImageGridTarget.innerHTML = html
+  }
+
+  onAiRefImageSearch() {
+    // Debounce search
+    if (this.aiRefImageSearchTimeout) {
+      clearTimeout(this.aiRefImageSearchTimeout)
+    }
+
+    this.aiRefImageSearchTimeout = setTimeout(() => {
+      const search = this.aiRefImageSearchTarget.value.trim()
+      this.loadAiRefImages(search)
+    }, 300)
+  }
+
+  selectAiRefImage(event) {
+    const button = event.currentTarget
+    const path = button.dataset.path
+    const name = button.dataset.name
+
+    // Store selected reference image
+    this.aiRefImage = { path, name }
+
+    // Update UI - show preview and hide picker
+    if (this.hasAiRefImagePreviewTarget) {
+      this.aiRefImagePreviewTarget.src = `/images/preview/${this.encodePath(path)}`
+    }
+    if (this.hasAiRefImageNameTarget) {
+      this.aiRefImageNameTarget.textContent = name
+    }
+    if (this.hasAiRefImagePreviewContainerTarget) {
+      this.aiRefImagePreviewContainerTarget.classList.remove("hidden")
+    }
+    if (this.hasAiRefImagePickerTarget) {
+      this.aiRefImagePickerTarget.classList.add("hidden")
+    }
+  }
+
+  clearAiRefImage() {
+    this.aiRefImage = null
+
+    // Update UI - hide preview and show picker
+    if (this.hasAiRefImagePreviewContainerTarget) {
+      this.aiRefImagePreviewContainerTarget.classList.add("hidden")
+    }
+    if (this.hasAiRefImagePickerTarget) {
+      this.aiRefImagePickerTarget.classList.remove("hidden")
+    }
+    if (this.hasAiRefImageSearchTarget) {
+      this.aiRefImageSearchTarget.value = ""
+    }
+    // Reload images
+    this.loadAiRefImages()
+  }
+
   renderExternalImageGrid(images, container) {
     if (!images || images.length === 0) {
       container.innerHTML = '<div class="col-span-4 text-center text-[var(--theme-text-muted)] py-8">No images found</div>'
@@ -1949,6 +2282,76 @@ export default class extends Controller {
       } catch (error) {
         console.error("Error uploading folder image:", error)
         alert(`Failed to upload image: ${error.message}`)
+        this.hideImageLoading()
+        this.insertImageBtnTarget.disabled = false
+        return
+      }
+
+      this.hideImageLoading()
+    } else if (this.selectedImage.type === "ai-generated") {
+      // AI-generated image - needs to be saved/uploaded
+      if (!this.generatedImageData) {
+        alert("No generated image data available")
+        return
+      }
+
+      const uploadToS3 = this.s3Enabled && this.hasAiImageSaveS3Target && this.aiImageSaveS3Target.checked
+
+      // Show loading state
+      const loadingMsg = uploadToS3 ? "Uploading to S3..." : "Saving image..."
+      this.showImageLoading(loadingMsg)
+      this.insertImageBtnTarget.disabled = true
+
+      try {
+        // If we have base64 data, upload it
+        if (this.generatedImageData.data) {
+          const response = await fetch("/images/upload_base64", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": this.csrfToken
+            },
+            body: JSON.stringify({
+              data: this.generatedImageData.data,
+              mime_type: this.generatedImageData.mime_type,
+              filename: `ai_${Date.now()}.png`,
+              upload_to_s3: uploadToS3
+            })
+          })
+
+          if (!response.ok) {
+            const data = await response.json()
+            throw new Error(data.error || "Failed to save image")
+          }
+
+          const data = await response.json()
+          imageUrl = data.url
+        } else if (this.generatedImageData.url) {
+          // If we have a URL (less common for AI generation), use it directly or re-upload to S3
+          if (uploadToS3) {
+            const response = await fetch("/images/upload_external_to_s3", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-CSRF-Token": this.csrfToken
+              },
+              body: JSON.stringify({ url: this.generatedImageData.url })
+            })
+
+            if (!response.ok) {
+              const data = await response.json()
+              throw new Error(data.error || "Failed to upload to S3")
+            }
+
+            const data = await response.json()
+            imageUrl = data.url
+          } else {
+            imageUrl = this.generatedImageData.url
+          }
+        }
+      } catch (error) {
+        console.error("Error saving AI-generated image:", error)
+        alert(`Failed to save image: ${error.message}`)
         this.hideImageLoading()
         this.insertImageBtnTarget.disabled = false
         return

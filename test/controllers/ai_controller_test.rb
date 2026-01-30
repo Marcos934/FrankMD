@@ -157,4 +157,42 @@ class AiControllerTest < ActionDispatch::IntegrationTest
     data = JSON.parse(response.body)
     assert_includes data["error"], "not configured"
   end
+
+  # Image config endpoint tests
+  test "image_config returns enabled false when no Gemini key" do
+    get "/ai/image_config", as: :json
+    assert_response :success
+
+    data = JSON.parse(response.body)
+    assert_equal false, data["enabled"]
+    assert_equal "imagen-4.0-generate-001", data["model"]
+  end
+
+  test "image_config returns enabled true when Gemini key is set" do
+    ENV["GEMINI_API_KEY"] = "gemini-test-key"
+
+    get "/ai/image_config", as: :json
+    assert_response :success
+
+    data = JSON.parse(response.body)
+    assert_equal true, data["enabled"]
+    assert_equal "imagen-4.0-generate-001", data["model"]
+  end
+
+  # Generate image endpoint tests
+  test "generate_image returns error when prompt is blank" do
+    post "/ai/generate_image", params: { prompt: "" }, as: :json
+    assert_response :bad_request
+
+    data = JSON.parse(response.body)
+    assert_includes data["error"], "No prompt"
+  end
+
+  test "generate_image returns error when not configured" do
+    post "/ai/generate_image", params: { prompt: "A sunset" }, as: :json
+    assert_response :unprocessable_entity
+
+    data = JSON.parse(response.body)
+    assert_includes data["error"], "not configured"
+  end
 end

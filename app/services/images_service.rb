@@ -135,6 +135,47 @@ class ImagesService
       end
     end
 
+    # Upload base64 encoded image data (e.g., from AI image generation)
+    def upload_base64_data(base64_data, mime_type: nil, filename: nil, upload_to_s3: false)
+      require "base64"
+      require "securerandom"
+      require "fileutils"
+
+      # Decode base64 data
+      begin
+        file_content = Base64.strict_decode64(base64_data)
+      rescue ArgumentError => e
+        return { error: "Invalid base64 data: #{e.message}" }
+      end
+
+      # Determine content type and extension
+      mime_type = mime_type.presence || "image/png"
+      extension = extension_for_content_type(mime_type)
+
+      # Generate filename if not provided
+      filename = filename.presence || "ai_generated_#{SecureRandom.hex(8)}#{extension}"
+      # Ensure filename has correct extension
+      unless filename.match?(/\.\w+$/)
+        filename = "#{filename}#{extension}"
+      end
+
+      # Create temp file
+      temp_dir = Rails.root.join("tmp", "uploads")
+      FileUtils.mkdir_p(temp_dir)
+      temp_path = temp_dir.join("#{SecureRandom.hex(8)}_#{filename}")
+      File.binwrite(temp_path, file_content)
+
+      begin
+        if upload_to_s3 && s3_enabled?
+          upload_temp_to_s3(temp_path, filename, resize: nil)
+        else
+          save_to_notes_directory(temp_path, filename, resize: nil)
+        end
+      ensure
+        FileUtils.rm_f(temp_path)
+      end
+    end
+
     def download_and_upload_to_s3(url, resize: nil)
       return nil unless s3_enabled?
 

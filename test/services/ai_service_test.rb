@@ -60,7 +60,8 @@ class AiServiceTest < ActiveSupport::TestCase
   end
 
   # Provider priority tests (auto mode)
-  # Priority: openai > anthropic > gemini > openrouter > ollama
+  # Priority: openai > anthropic > openrouter > ollama > gemini
+  # Gemini is lowest because its key is primarily for image generation (Imagen)
   test "current_provider returns openai when multiple providers available" do
     ENV["OLLAMA_API_BASE"] = "http://localhost:11434"
     ENV["OPENAI_API_KEY"] = "sk-test"
@@ -76,24 +77,25 @@ class AiServiceTest < ActiveSupport::TestCase
     assert_equal "anthropic", AiService.current_provider
   end
 
-  test "current_provider returns gemini when higher priority not available" do
-    ENV["GEMINI_API_KEY"] = "gemini-test"
-    ENV["OPENROUTER_API_KEY"] = "sk-or-test"
-
-    assert_equal "gemini", AiService.current_provider
-  end
-
   test "current_provider returns openrouter when higher priority not available" do
     ENV["OPENROUTER_API_KEY"] = "sk-or-test"
     ENV["OLLAMA_API_BASE"] = "http://localhost:11434"
+    ENV["GEMINI_API_KEY"] = "gemini-test"
 
     assert_equal "openrouter", AiService.current_provider
   end
 
-  test "current_provider returns ollama when only ollama available" do
+  test "current_provider returns ollama over gemini" do
     ENV["OLLAMA_API_BASE"] = "http://localhost:11434"
+    ENV["GEMINI_API_KEY"] = "gemini-test"
 
     assert_equal "ollama", AiService.current_provider
+  end
+
+  test "current_provider returns gemini when only gemini available" do
+    ENV["GEMINI_API_KEY"] = "gemini-test"
+
+    assert_equal "gemini", AiService.current_provider
   end
 
   # Provider override tests
@@ -200,5 +202,60 @@ class AiServiceTest < ActiveSupport::TestCase
     assert_includes providers, "anthropic"
     assert_not_includes providers, "gemini"
     assert_not_includes providers, "openrouter"
+  end
+
+  # Image generation tests
+  test "image_generation_enabled? returns false when no Gemini key" do
+    assert_not AiService.image_generation_enabled?
+  end
+
+  test "image_generation_enabled? returns true when Gemini key is set" do
+    ENV["GEMINI_API_KEY"] = "gemini-test-key"
+    assert AiService.image_generation_enabled?
+  end
+
+  test "image_generation_model returns default model" do
+    assert_equal "imagen-4.0-generate-001", AiService.image_generation_model
+  end
+
+  test "image_generation_info returns correct structure" do
+    info = AiService.image_generation_info
+    assert_includes info.keys, :enabled
+    assert_includes info.keys, :model
+    assert_equal false, info[:enabled]
+    assert_equal "imagen-4.0-generate-001", info[:model]
+  end
+
+  test "image_generation_info returns enabled when Gemini key set" do
+    ENV["GEMINI_API_KEY"] = "gemini-test-key"
+    info = AiService.image_generation_info
+    assert_equal true, info[:enabled]
+  end
+
+  test "generate_image returns error when not configured" do
+    result = AiService.generate_image("A sunset over mountains")
+    assert_includes result[:error], "not configured"
+  end
+
+  test "generate_image returns error when prompt is blank" do
+    ENV["GEMINI_API_KEY"] = "gemini-test-key"
+    result = AiService.generate_image("")
+    assert_equal "No prompt provided", result[:error]
+  end
+
+  test "generate_image returns error when prompt is nil" do
+    ENV["GEMINI_API_KEY"] = "gemini-test-key"
+    result = AiService.generate_image(nil)
+    assert_equal "No prompt provided", result[:error]
+  end
+
+  test "generate_image accepts reference_image_path parameter" do
+    ENV["GEMINI_API_KEY"] = "gemini-test-key"
+    # This will fail at the API call since we don't have a real key,
+    # but it verifies the method accepts the parameter
+    result = AiService.generate_image("A sunset", reference_image_path: "nonexistent.jpg")
+    # Should not error on the parameter itself - will fail later at API call
+    # Reference image doesn't exist, so it falls back to text-only which hits Imagen API
+    assert result[:error].present?
   end
 end

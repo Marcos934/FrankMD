@@ -44,7 +44,10 @@ class Config
     "gemini_api_key" => { default: nil, type: :string, env: "GEMINI_API_KEY" },
     "gemini_model" => { default: "gemini-2.0-flash", type: :string, env: "GEMINI_MODEL" },
     "openai_api_key" => { default: nil, type: :string, env: "OPENAI_API_KEY" },
-    "openai_model" => { default: "gpt-4o-mini", type: :string, env: "OPENAI_MODEL" }
+    "openai_model" => { default: "gpt-4o-mini", type: :string, env: "OPENAI_MODEL" },
+
+    # AI Image Generation
+    "image_generation_model" => { default: "imagen-4.0-generate-001", type: :string, env: "IMAGE_GENERATION_MODEL" }
   }.freeze
 
   # Keys that should not be exposed to the frontend (sensitive)
@@ -71,7 +74,9 @@ class Config
 
   # AI provider priority (default order when ai_provider = "auto")
   # OpenAI first as most reliable, then cloud providers, then local
-  AI_PROVIDER_PRIORITY = %w[openai anthropic gemini openrouter ollama].freeze
+  # Gemini is last because its API key is primarily for image generation (Imagen)
+  # This allows using Anthropic for text while Gemini handles images
+  AI_PROVIDER_PRIORITY = %w[openai anthropic openrouter ollama gemini].freeze
 
   # AI credential keys - if ANY of these are set in .webnotes, ignore ALL AI ENV vars
   # This allows users to override their global ENV config per-folder
@@ -159,7 +164,8 @@ class Config
       lines: [
         "",
         "# AI/LLM (for grammar checking)",
-        "# Provider priority when ai_provider = auto: openai > anthropic > gemini > openrouter > ollama",
+        "# Provider priority when ai_provider = auto: openai > anthropic > openrouter > ollama > gemini",
+        "# Gemini is lowest priority for text (its key is mainly for image generation)",
         "",
         "# ai_provider = auto",
         "# ai_model = (uses provider-specific default if not set)",

@@ -4,8 +4,8 @@ require "net/http"
 require "json"
 
 class ImagesController < ApplicationController
-  skip_forgery_protection only: [ :upload, :upload_to_s3, :upload_external_to_s3 ]
-  before_action :require_images_enabled, except: [ :config, :upload, :search_google, :search_pinterest ]
+  skip_forgery_protection only: [ :upload, :upload_to_s3, :upload_external_to_s3, :upload_base64 ]
+  before_action :require_images_enabled, except: [ :config, :upload, :upload_base64, :search_google, :search_pinterest ]
 
   # GET /images/config
   def config
@@ -102,6 +102,36 @@ class ImagesController < ApplicationController
     end
   rescue StandardError => e
     Rails.logger.error "External S3 upload error: #{e.class} - #{e.message}"
+    render json: { error: "#{e.class}: #{e.message}" }, status: :unprocessable_entity
+  end
+
+  # POST /images/upload_base64
+  # Upload base64 encoded image data (e.g., from AI image generation)
+  def upload_base64
+    data = params[:data].to_s
+    mime_type = params[:mime_type].to_s
+    filename = params[:filename].to_s
+    upload_to_s3 = params[:upload_to_s3] == true || params[:upload_to_s3] == "true"
+
+    if data.blank?
+      return render json: { error: "No image data provided" }, status: :bad_request
+    end
+
+    result = ImagesService.upload_base64_data(
+      data,
+      mime_type: mime_type,
+      filename: filename,
+      upload_to_s3: upload_to_s3
+    )
+
+    if result[:url]
+      render json: { url: result[:url] }
+    else
+      render json: { error: result[:error] || "Upload failed" }, status: :unprocessable_entity
+    end
+  rescue StandardError => e
+    Rails.logger.error "Base64 upload error: #{e.class} - #{e.message}"
+    Rails.logger.error e.backtrace.first(10).join("\n")
     render json: { error: "#{e.class}: #{e.message}" }, status: :unprocessable_entity
   end
 

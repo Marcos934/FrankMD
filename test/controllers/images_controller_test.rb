@@ -217,6 +217,83 @@ class ImagesControllerTest < ActionDispatch::IntegrationTest
       created_file = notes_path.join(data["url"])
       FileUtils.rm_f(created_file) if created_file.exist?
     end
+
+    test "upload_base64 saves base64 image data to notes/images" do
+      # 1x1 PNG image encoded as base64
+      png_data = [
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+        0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+        0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xDE, 0x00, 0x00, 0x00,
+        0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00,
+        0x00, 0x00, 0x03, 0x00, 0x01, 0x00, 0x05, 0xFE, 0xD4, 0xE7, 0x00, 0x00,
+        0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
+      ].pack("C*")
+      base64_data = Base64.strict_encode64(png_data)
+
+      notes_path = Pathname.new(ENV.fetch("NOTES_PATH", Rails.root.join("notes")))
+
+      post "/images/upload_base64", params: {
+        data: base64_data,
+        mime_type: "image/png",
+        filename: "ai_test.png"
+      }, as: :json
+
+      assert_response :success
+      data = JSON.parse(response.body)
+      assert data["url"].start_with?("images/")
+      assert data["url"].include?("ai_test")
+
+      # Clean up
+      created_file = notes_path.join(data["url"])
+      FileUtils.rm_f(created_file) if created_file.exist?
+    end
+
+    test "upload_base64 returns error when no data provided" do
+      post "/images/upload_base64", params: { data: "" }, as: :json
+      assert_response :bad_request
+
+      data = JSON.parse(response.body)
+      assert_includes data["error"], "No image data"
+    end
+
+    test "upload_base64 returns error for invalid base64" do
+      post "/images/upload_base64", params: {
+        data: "not valid base64!!!",
+        mime_type: "image/png"
+      }, as: :json
+
+      assert_response :unprocessable_entity
+      data = JSON.parse(response.body)
+      assert_includes data["error"], "Invalid base64"
+    end
+
+    test "upload_base64 generates filename when not provided" do
+      png_data = [
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+        0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+        0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xDE, 0x00, 0x00, 0x00,
+        0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00,
+        0x00, 0x00, 0x03, 0x00, 0x01, 0x00, 0x05, 0xFE, 0xD4, 0xE7, 0x00, 0x00,
+        0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
+      ].pack("C*")
+      base64_data = Base64.strict_encode64(png_data)
+
+      notes_path = Pathname.new(ENV.fetch("NOTES_PATH", Rails.root.join("notes")))
+
+      post "/images/upload_base64", params: {
+        data: base64_data,
+        mime_type: "image/png"
+      }, as: :json
+
+      assert_response :success
+      data = JSON.parse(response.body)
+      assert data["url"].start_with?("images/")
+      assert data["url"].include?("ai_generated_")
+
+      # Clean up
+      created_file = notes_path.join(data["url"])
+      FileUtils.rm_f(created_file) if created_file.exist?
+    end
   end
 
   # Tests for disabled state

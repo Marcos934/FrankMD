@@ -22,6 +22,7 @@ Rails.application.routes.draw do
   post "images/upload", to: "images#upload"
   post "images/upload_to_s3", to: "images#upload_to_s3"
   post "images/upload_external_to_s3", to: "images#upload_external_to_s3"
+  post "images/upload_base64", to: "images#upload_base64"
   get "images/search_web", to: "images#search_web"
   get "images/search_google", to: "images#search_google"
   get "images/search_pinterest", to: "images#search_pinterest"
@@ -33,6 +34,8 @@ Rails.application.routes.draw do
   # AI endpoints
   get "ai/config", to: "ai#config"
   post "ai/fix_grammar", to: "ai#fix_grammar"
+  get "ai/image_config", to: "ai#image_config"
+  post "ai/generate_image", to: "ai#generate_image"
 
   # Config API
   get "config", to: "config#show"
