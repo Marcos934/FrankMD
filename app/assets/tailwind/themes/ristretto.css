@@ -1,0 +1,29 @@
+/* Ristretto - Rich coffee-inspired warm brown tones */
+[data-theme="ristretto"] {
+  --theme-bg-primary: #1a1513;
+  --theme-bg-secondary: #14110f;
+  --theme-bg-tertiary: #241f1c;
+  --theme-bg-hover: #332b26;
+  --theme-text-primary: #e8dcd4;
+  --theme-text-secondary: #d4c4b8;
+  --theme-text-muted: #8b7b6d;
+  --theme-text-faint: #5d524a;
+  --theme-border: #332b26;
+  --theme-accent: #c49b6f;
+  --theme-accent-hover: #d4ab7f;
+  --theme-accent-text: #1a1513;
+  --theme-selection: #3d342e;
+  --theme-selection-text: #e8dcd4;
+  --theme-scrollbar: #3d342e;
+  --theme-scrollbar-hover: #4d423a;
+  --theme-success: #a3be8c;
+  --theme-warning: #d4a96a;
+  --theme-error: #bf6868;
+  --theme-code-bg: #241f1c;
+  --theme-heading-1: #c49b6f;
+  --theme-heading-2: #a89078;
+  --theme-heading-3: #9cb08a;
+  --theme-folder-icon: #c49b6f;
+  --theme-file-icon: #8b7b6d;
+  --theme-config-icon: #d4a96a;
+}

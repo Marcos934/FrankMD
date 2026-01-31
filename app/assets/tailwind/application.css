@@ -48,17 +48,25 @@
  * --theme-config-icon : File tree config icon color
  */
 
-/* Theme imports */
+/* Theme imports - Light and Dark first, then alphabetical */
 @import "./themes/light.css";
 @import "./themes/dark.css";
+@import "./themes/cappuccino.css";
+@import "./themes/catppuccin.css";
+@import "./themes/catppuccin-latte.css";
+@import "./themes/ethereal.css";
+@import "./themes/everforest.css";
 @import "./themes/gruvbox.css";
-@import "./themes/tokyo-night.css";
+@import "./themes/hackerman.css";
+@import "./themes/kanagawa.css";
+@import "./themes/matte-black.css";
+@import "./themes/nord.css";
+@import "./themes/osaka-jade.css";
+@import "./themes/ristretto.css";
+@import "./themes/rose-pine.css";
 @import "./themes/solarized-dark.css";
 @import "./themes/solarized-light.css";
-@import "./themes/nord.css";
-@import "./themes/cappuccino.css";
-@import "./themes/osaka.css";
-@import "./themes/hackerman.css";
+@import "./themes/tokyo-night.css";
 
 /* Component imports */
 @import "./components/scrollbar.css";

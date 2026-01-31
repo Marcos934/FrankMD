@@ -4,18 +4,26 @@ export default class extends Controller {
   static targets = ["menu", "currentTheme"]
   static values = { initial: String }
 
-  // Available themes - add new themes here
+  // Available themes - Light and Dark first, then alphabetical
   static themes = [
     { id: "light", name: "Light", icon: "sun" },
     { id: "dark", name: "Dark", icon: "moon" },
+    { id: "cappuccino", name: "Cappuccino", icon: "palette" },
+    { id: "catppuccin", name: "Catppuccin", icon: "palette" },
+    { id: "catppuccin-latte", name: "Catppuccin Latte", icon: "palette" },
+    { id: "ethereal", name: "Ethereal", icon: "palette" },
+    { id: "everforest", name: "Everforest", icon: "palette" },
     { id: "gruvbox", name: "Gruvbox", icon: "palette" },
-    { id: "tokyo-night", name: "Tokyo Night", icon: "palette" },
+    { id: "hackerman", name: "Hackerman", icon: "palette" },
+    { id: "kanagawa", name: "Kanagawa", icon: "palette" },
+    { id: "matte-black", name: "Matte Black", icon: "palette" },
+    { id: "nord", name: "Nord", icon: "palette" },
+    { id: "osaka-jade", name: "Osaka Jade", icon: "palette" },
+    { id: "ristretto", name: "Ristretto", icon: "palette" },
+    { id: "rose-pine", name: "Rose Pine", icon: "palette" },
     { id: "solarized-dark", name: "Solarized Dark", icon: "palette" },
     { id: "solarized-light", name: "Solarized Light", icon: "palette" },
-    { id: "nord", name: "Nord", icon: "palette" },
-    { id: "cappuccino", name: "Cappuccino", icon: "palette" },
-    { id: "osaka", name: "Osaka", icon: "palette" },
-    { id: "hackerman", name: "Hackerman", icon: "palette" }
+    { id: "tokyo-night", name: "Tokyo Night", icon: "palette" }
   ]
 
   connect() {
@@ -103,7 +111,7 @@ export default class extends Controller {
     document.documentElement.setAttribute("data-theme", themeId)
 
     // Also set dark class for Tailwind dark: variants
-    const isDarkTheme = !["light", "solarized-light"].includes(themeId)
+    const isDarkTheme = !["light", "solarized-light", "catppuccin-latte"].includes(themeId)
     document.documentElement.classList.toggle("dark", isDarkTheme)
 
     // Update current theme display

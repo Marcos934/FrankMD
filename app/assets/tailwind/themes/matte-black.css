@@ -1,0 +1,29 @@
+/* Matte Black - Pure dark theme for OLED displays */
+[data-theme="matte-black"] {
+  --theme-bg-primary: #000000;
+  --theme-bg-secondary: #0a0a0a;
+  --theme-bg-tertiary: #141414;
+  --theme-bg-hover: #1f1f1f;
+  --theme-text-primary: #e5e5e5;
+  --theme-text-secondary: #b3b3b3;
+  --theme-text-muted: #666666;
+  --theme-text-faint: #4d4d4d;
+  --theme-border: #262626;
+  --theme-accent: #ffffff;
+  --theme-accent-hover: #e5e5e5;
+  --theme-accent-text: #000000;
+  --theme-selection: #333333;
+  --theme-selection-text: #ffffff;
+  --theme-scrollbar: #333333;
+  --theme-scrollbar-hover: #4d4d4d;
+  --theme-success: #4ade80;
+  --theme-warning: #fbbf24;
+  --theme-error: #f87171;
+  --theme-code-bg: #141414;
+  --theme-heading-1: #ffffff;
+  --theme-heading-2: #a3a3a3;
+  --theme-heading-3: #737373;
+  --theme-folder-icon: #ffffff;
+  --theme-file-icon: #666666;
+  --theme-config-icon: #fbbf24;
+}

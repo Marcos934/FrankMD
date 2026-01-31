@@ -1,0 +1,29 @@
+/* Catppuccin Latte - Light pastel theme for daytime coding */
+[data-theme="catppuccin-latte"] {
+  --theme-bg-primary: #eff1f5;
+  --theme-bg-secondary: #e6e9ef;
+  --theme-bg-tertiary: #dce0e8;
+  --theme-bg-hover: #ccd0da;
+  --theme-text-primary: #4c4f69;
+  --theme-text-secondary: #5c5f77;
+  --theme-text-muted: #8c8fa1;
+  --theme-text-faint: #9ca0b0;
+  --theme-border: #ccd0da;
+  --theme-accent: #8839ef;
+  --theme-accent-hover: #7c2fe0;
+  --theme-accent-text: #ffffff;
+  --theme-selection: #ccd0da;
+  --theme-selection-text: #4c4f69;
+  --theme-scrollbar: #bcc0cc;
+  --theme-scrollbar-hover: #acb0be;
+  --theme-success: #40a02b;
+  --theme-warning: #fe640b;
+  --theme-error: #d20f39;
+  --theme-code-bg: #dce0e8;
+  --theme-heading-1: #8839ef;
+  --theme-heading-2: #1e66f5;
+  --theme-heading-3: #179299;
+  --theme-folder-icon: #1e66f5;
+  --theme-file-icon: #8c8fa1;
+  --theme-config-icon: #fe640b;
+}

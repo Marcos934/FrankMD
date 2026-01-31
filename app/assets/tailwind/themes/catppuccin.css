@@ -1,0 +1,29 @@
+/* Catppuccin Mocha - Soothing pastel theme for the high-spirited */
+[data-theme="catppuccin"] {
+  --theme-bg-primary: #1e1e2e;
+  --theme-bg-secondary: #181825;
+  --theme-bg-tertiary: #313244;
+  --theme-bg-hover: #45475a;
+  --theme-text-primary: #cdd6f4;
+  --theme-text-secondary: #bac2de;
+  --theme-text-muted: #6c7086;
+  --theme-text-faint: #585b70;
+  --theme-border: #45475a;
+  --theme-accent: #cba6f7;
+  --theme-accent-hover: #f5c2e7;
+  --theme-accent-text: #1e1e2e;
+  --theme-selection: #45475a;
+  --theme-selection-text: #cdd6f4;
+  --theme-scrollbar: #45475a;
+  --theme-scrollbar-hover: #585b70;
+  --theme-success: #a6e3a1;
+  --theme-warning: #fab387;
+  --theme-error: #f38ba8;
+  --theme-code-bg: #313244;
+  --theme-heading-1: #cba6f7;
+  --theme-heading-2: #89b4fa;
+  --theme-heading-3: #94e2d5;
+  --theme-folder-icon: #89b4fa;
+  --theme-file-icon: #6c7086;
+  --theme-config-icon: #fab387;
+}

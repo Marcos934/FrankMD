@@ -1,0 +1,29 @@
+/* Ethereal - Soft, dreamy colors with mystical vibes */
+[data-theme="ethereal"] {
+  --theme-bg-primary: #1a1a2e;
+  --theme-bg-secondary: #16162a;
+  --theme-bg-tertiary: #252547;
+  --theme-bg-hover: #353560;
+  --theme-text-primary: #e4e4f5;
+  --theme-text-secondary: #c9c9e0;
+  --theme-text-muted: #7a7a9d;
+  --theme-text-faint: #5a5a7a;
+  --theme-border: #353560;
+  --theme-accent: #a78bfa;
+  --theme-accent-hover: #c4b5fd;
+  --theme-accent-text: #1a1a2e;
+  --theme-selection: #4c4c75;
+  --theme-selection-text: #e4e4f5;
+  --theme-scrollbar: #4c4c75;
+  --theme-scrollbar-hover: #5e5e8a;
+  --theme-success: #86efac;
+  --theme-warning: #fcd34d;
+  --theme-error: #fb7185;
+  --theme-code-bg: #252547;
+  --theme-heading-1: #c4b5fd;
+  --theme-heading-2: #93c5fd;
+  --theme-heading-3: #a5f3fc;
+  --theme-folder-icon: #a78bfa;
+  --theme-file-icon: #7a7a9d;
+  --theme-config-icon: #fcd34d;
+}

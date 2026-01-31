@@ -1,0 +1,29 @@
+/* Rose Pine - All natural pine, faux fur and a bit of soho vibes */
+[data-theme="rose-pine"] {
+  --theme-bg-primary: #191724;
+  --theme-bg-secondary: #1f1d2e;
+  --theme-bg-tertiary: #26233a;
+  --theme-bg-hover: #403d52;
+  --theme-text-primary: #e0def4;
+  --theme-text-secondary: #c4a7e7;
+  --theme-text-muted: #6e6a86;
+  --theme-text-faint: #524f67;
+  --theme-border: #403d52;
+  --theme-accent: #ebbcba;
+  --theme-accent-hover: #f2cecb;
+  --theme-accent-text: #191724;
+  --theme-selection: #44415a;
+  --theme-selection-text: #e0def4;
+  --theme-scrollbar: #403d52;
+  --theme-scrollbar-hover: #524f67;
+  --theme-success: #9ccfd8;
+  --theme-warning: #f6c177;
+  --theme-error: #eb6f92;
+  --theme-code-bg: #26233a;
+  --theme-heading-1: #c4a7e7;
+  --theme-heading-2: #9ccfd8;
+  --theme-heading-3: #ebbcba;
+  --theme-folder-icon: #c4a7e7;
+  --theme-file-icon: #6e6a86;
+  --theme-config-icon: #f6c177;
+}
