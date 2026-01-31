@@ -22,6 +22,8 @@ en:
   languages:
     en: "English"
     pt_BR: "Portugues (Brasil)"
+    es: "Español"
+    ja: "日本語"
 
   # Header section
   header:

@@ -7,7 +7,9 @@ export default class extends Controller {
   // Available locales
   static locales = [
     { id: "en", name: "English", flag: "us" },
-    { id: "pt-BR", name: "Portugues (Brasil)", flag: "br" }
+    { id: "pt-BR", name: "Português (Brasil)", flag: "br" },
+    { id: "es", name: "Español", flag: "es" },
+    { id: "ja", name: "日本語", flag: "jp" }
   ]
 
   connect() {
@@ -157,7 +159,9 @@ export default class extends Controller {
     // Simple flag emoji based on country code
     const flags = {
       us: `<span class="text-base">🇺🇸</span>`,
-      br: `<span class="text-base">🇧🇷</span>`
+      br: `<span class="text-base">🇧🇷</span>`,
+      es: `<span class="text-base">🇪🇸</span>`,
+      jp: `<span class="text-base">🇯🇵</span>`
     }
     return flags[flagCode] || ""
   }

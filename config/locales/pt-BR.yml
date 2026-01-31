@@ -22,6 +22,8 @@ pt-BR:
   languages:
     en: "English"
     pt_BR: "Português (Brasil)"
+    es: "Español"
+    ja: "日本語"
 
   # Seção do cabeçalho
   header:
