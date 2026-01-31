@@ -1,8 +1,10 @@
 import { Controller } from "@hotwired/stimulus"
 import { marked } from "marked"
+import { calculateLineFromScroll } from "lib/scroll_utils"
 
 // Preview Controller
 // Handles markdown preview panel rendering, zoom, and scroll sync
+// Provides setupEditorSync() and syncToCursor() for editor synchronization
 // Dispatches preview:toggled and preview:zoom-changed events
 // Automatically strips YAML/TOML frontmatter from preview
 
@@ -59,6 +61,10 @@ export default class extends Controller {
     this.syncScrollTimeout = null
     this.lastScrollTarget = null
     this.scrollThreshold = 10 // Pixels - avoid jitter from micro-adjustments
+    this.editorTextarea = null
+    this._lastSyncedLine = null
+    this._lastSyncedTotalLines = null
+    this._previewRenderTimeout = null
     this.applyZoom()
   }
 
@@ -66,6 +72,10 @@ export default class extends Controller {
     if (this.syncScrollTimeout) {
       cancelAnimationFrame(this.syncScrollTimeout)
     }
+    if (this._previewRenderTimeout) {
+      clearTimeout(this._previewRenderTimeout)
+    }
+    this.editorTextarea = null
   }
 
   // Toggle preview panel visibility
@@ -321,5 +331,102 @@ export default class extends Controller {
     if (this.hasContentTarget) {
       this.contentTarget.classList.toggle("preview-typewriter-mode", enabled)
     }
+  }
+
+  // Setup editor synchronization - store reference to textarea and add scroll listeners
+  setupEditorSync(textarea) {
+    this.editorTextarea = textarea
+  }
+
+  // Sync preview scroll to cursor position in editor
+  syncToCursor() {
+    if (!this.syncScrollEnabledValue) return
+    if (!this.isVisible) return
+    if (!this.editorTextarea) return
+
+    const textarea = this.editorTextarea
+    const content = textarea.value
+    const cursorPos = textarea.selectionStart
+
+    const textBeforeCursor = content.substring(0, cursorPos)
+    const linesBefore = textBeforeCursor.split("\n").length
+    const totalLines = content.split("\n").length
+
+    this.syncToLine(linesBefore, totalLines)
+  }
+
+  // Update preview with content and sync scroll to cursor
+  // This is called during typing - only syncs when line changes
+  updateWithSync(content, options = {}) {
+    if (!this.isVisible) return
+
+    const cursorPos = options.cursorPos || 0
+    const typewriterMode = options.typewriterMode || false
+
+    // Calculate cursor line info
+    const textBeforeCursor = content.substring(0, cursorPos)
+    const currentLine = textBeforeCursor.split("\n").length
+    const totalLines = content.split("\n").length
+
+    // Only sync scroll when line changes (prevents jitter from typing on same line)
+    const lineChanged = this._lastSyncedLine !== currentLine ||
+                        this._lastSyncedTotalLines !== totalLines
+
+    // Debounce preview render to reduce DOM thrashing
+    if (this._previewRenderTimeout) {
+      clearTimeout(this._previewRenderTimeout)
+    }
+
+    this._previewRenderTimeout = setTimeout(() => {
+      // Build scroll data - only sync scroll if line changed
+      const scrollData = {
+        typewriterMode,
+        currentLine,
+        totalLines,
+        syncToCursor: lineChanged
+      }
+
+      this.update(content, scrollData)
+
+      if (lineChanged) {
+        this._lastSyncedLine = currentLine
+        this._lastSyncedTotalLines = totalLines
+      }
+    }, 50) // Small debounce for render
+  }
+
+  // Sync preview scroll in typewriter mode based on visible content
+  syncScrollTypewriter(textarea) {
+    if (!this.syncScrollEnabledValue) return
+    if (!this.isVisible) return
+    if (!textarea) return
+
+    const content = textarea.value
+    const totalLines = content.split("\n").length
+
+    // Calculate which line is at the center of visible area using utility function
+    const centerLine = calculateLineFromScroll(
+      textarea.scrollTop,
+      textarea.clientHeight,
+      textarea.scrollHeight,
+      totalLines
+    )
+
+    this.syncToTypewriter(centerLine, totalLines)
+  }
+
+  // Sync scroll from editor scroll event (normal mode - ratio based)
+  syncFromEditorScroll(textarea) {
+    if (!this.syncScrollEnabledValue) return
+    if (!this.isVisible) return
+    if (!textarea) return
+
+    const scrollTop = textarea.scrollTop
+    const scrollHeight = textarea.scrollHeight - textarea.clientHeight
+
+    if (scrollHeight <= 0) return
+
+    const scrollRatio = scrollTop / scrollHeight
+    this.syncScrollRatio(scrollRatio)
   }
 }

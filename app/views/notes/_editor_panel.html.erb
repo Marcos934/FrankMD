@@ -128,14 +128,18 @@
         <p class="text-xs mt-1"><%= t('editor.select_note_hint') %></p>
       </div>
     </div>
-    <div class="h-full hidden relative" data-app-target="editor">
-      <div class="h-full flex editor-wrapper" data-app-target="editorWrapper">
-        <div class="editor-line-number-gutter text-xs text-[var(--theme-text-faint)]" data-app-target="lineNumberGutter">
-          <pre class="editor-line-numbers" data-app-target="lineNumbers"></pre>
+    <div class="h-full hidden relative" data-app-target="editor"
+         data-controller="line-numbers"
+         data-action="line-numbers:mode-changed->app#onLineNumberModeChanged">
+      <div class="h-full flex editor-wrapper" data-app-target="editorWrapper" data-typewriter-target="wrapper">
+        <div class="editor-line-number-gutter text-xs text-[var(--theme-text-faint)] hidden" data-line-numbers-target="gutter">
+          <pre class="editor-line-numbers" data-line-numbers-target="numbers"></pre>
         </div>
-        <div class="flex-1 h-full editor-body" data-app-target="editorBody">
+        <div class="flex-1 h-full editor-body" data-app-target="editorBody" data-typewriter-target="body">
           <textarea
             data-app-target="textarea"
+            data-line-numbers-target="textarea"
+            data-typewriter-target="textarea"
             data-action="input->app#onTextareaInput contextmenu->app#onTextareaContextMenu keydown->app#onTextareaKeydown keyup->app#onTextareaSelectionChange click->app#onTextareaSelectionChange scroll->app#onTextareaScroll"
             class="editor-textarea w-full h-full p-4 resize-none bg-[var(--theme-bg-primary)] text-[var(--theme-text-primary)] font-mono text-sm leading-relaxed focus:outline-none"
             placeholder="<%= t('editor.start_writing') %>"

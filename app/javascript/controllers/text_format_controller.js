@@ -2,10 +2,12 @@ import { Controller } from "@hotwired/stimulus"
 
 // Text Format Controller
 // Handles text formatting context menu for inline markdown formatting
+// Provides openAtCursor() and openAtPosition() for menu positioning
+// Provides applyFormatById() for direct formatting (keyboard shortcuts)
 // Dispatches text-format:applied event with { format, prefix, suffix, selectionData }
 
 export default class extends Controller {
-  static targets = ["menu"]
+  static targets = ["menu", "textarea"]
 
   static formats = [
     { id: "bold", label: "Bold", hotkey: "B", prefix: "**", suffix: "**" },
@@ -215,5 +217,159 @@ export default class extends Controller {
   // Get a format by its ID
   getFormat(formatId) {
     return this.constructor.formats.find(f => f.id === formatId)
+  }
+
+  // Open the format menu at cursor position (via Ctrl+M)
+  openAtCursor(textarea) {
+    if (!textarea) return
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+
+    // Only open if text is selected
+    if (start === end) return
+
+    const selectedText = textarea.value.substring(start, end)
+    if (!selectedText.trim()) return
+
+    const selectionData = {
+      start,
+      end,
+      text: selectedText
+    }
+
+    // Calculate position based on cursor/selection
+    const { x, y } = this.getCaretCoordinates(textarea, end)
+
+    this.open(selectionData, x, y + 20) // Offset below cursor
+  }
+
+  // Open the format menu at a specific position (via context menu)
+  openAtPosition(textarea, x, y) {
+    if (!textarea) return
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+
+    // Only open if text is selected
+    if (start === end) return
+
+    const selectedText = textarea.value.substring(start, end)
+    if (!selectedText.trim()) return
+
+    const selectionData = {
+      start,
+      end,
+      text: selectedText
+    }
+
+    this.open(selectionData, x, y)
+  }
+
+  // Apply a format directly by its ID (for keyboard shortcuts like Ctrl+B, Ctrl+I)
+  applyFormatById(formatId, textarea) {
+    if (!textarea) return
+
+    const format = this.getFormat(formatId)
+    if (!format) return
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const text = textarea.value.substring(start, end)
+
+    // If no selection, just insert the format markers and place cursor between them
+    if (start === end) {
+      const { prefix, suffix } = format
+      const before = textarea.value.substring(0, start)
+      const after = textarea.value.substring(end)
+      textarea.value = before + prefix + suffix + after
+      // Position cursor between prefix and suffix
+      const cursorPos = start + prefix.length
+      textarea.setSelectionRange(cursorPos, cursorPos)
+      textarea.focus()
+      return true // Indicates formatting was applied
+    }
+
+    // Apply formatting to selected text
+    const selectionData = { start, end, text }
+    this.applyFormatToTextarea(format, selectionData, textarea)
+    return true
+  }
+
+  // Apply format to textarea and update its value
+  applyFormatToTextarea(format, selectionData, textarea) {
+    if (!format || !selectionData || !textarea) return
+
+    const { start, end, text } = selectionData
+    const { prefix, suffix } = format
+
+    // Build the formatted text
+    const formattedText = prefix + text + suffix
+
+    // Replace the selected text
+    const before = textarea.value.substring(0, start)
+    const after = textarea.value.substring(end)
+    textarea.value = before + formattedText + after
+
+    // Calculate new cursor position
+    // For link format, select "url" for easy replacement
+    if (prefix === "[" && suffix === "](url)") {
+      const urlStart = start + prefix.length + text.length + 2 // After ](
+      const urlEnd = urlStart + 3 // Select "url"
+      textarea.setSelectionRange(urlStart, urlEnd)
+    } else {
+      // Position cursor after the formatted text
+      const newPosition = start + formattedText.length
+      textarea.setSelectionRange(newPosition, newPosition)
+    }
+
+    textarea.focus()
+  }
+
+  // Get approximate caret coordinates in a textarea
+  getCaretCoordinates(textarea, position) {
+    // Create a mirror div to measure text position
+    const mirror = document.createElement("div")
+    const style = window.getComputedStyle(textarea)
+
+    // Copy relevant styles
+    mirror.style.cssText = `
+      position: absolute;
+      top: -9999px;
+      left: -9999px;
+      width: ${textarea.clientWidth}px;
+      height: auto;
+      font-family: ${style.fontFamily};
+      font-size: ${style.fontSize};
+      font-weight: ${style.fontWeight};
+      line-height: ${style.lineHeight};
+      padding: ${style.padding};
+      border: ${style.border};
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    `
+
+    // Get text before position
+    const textBefore = textarea.value.substring(0, position)
+    mirror.textContent = textBefore
+
+    // Add a marker span at the position
+    const marker = document.createElement("span")
+    marker.textContent = "|"
+    mirror.appendChild(marker)
+
+    document.body.appendChild(mirror)
+
+    // Get textarea's position on screen
+    const textareaRect = textarea.getBoundingClientRect()
+
+    // Calculate position relative to viewport
+    const x = textareaRect.left + marker.offsetLeft - textarea.scrollLeft
+    const y = textareaRect.top + marker.offsetTop - textarea.scrollTop
+
+    document.body.removeChild(mirror)
+
+    return { x, y }
   }
 }

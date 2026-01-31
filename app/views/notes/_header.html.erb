@@ -29,11 +29,13 @@
   <div class="flex-1 min-w-0 mx-3 flex items-center gap-2">
     <div
       class="path-container relative cursor-pointer"
-      data-action="click->app#copyPathToClipboard mouseenter->app#showFullPath mouseleave->app#hideFullPath"
+      data-controller="path-display"
+      data-action="click->path-display#copy mouseenter->path-display#showFull mouseleave->path-display#hideFull"
       title="<%= t('header.click_to_copy_path') %>"
     >
       <span
         class="path-text text-sm text-[var(--theme-text-muted)] whitespace-nowrap"
+        data-path-display-target="text"
         data-app-target="currentPath"
       ><%= t('editor.select_note') %></span>
     </div>
@@ -41,10 +43,11 @@
   </div>
 
   <!-- Right: Toolbar buttons -->
-  <div class="flex items-center gap-2 shrink-0">
+  <div class="flex items-center gap-2 shrink-0" data-controller="typewriter" data-action="typewriter:toggled->app#onTypewriterToggled">
     <button
       type="button"
-      data-action="click->app#toggleTypewriterMode"
+      data-action="click->typewriter#toggle"
+      data-typewriter-target="toggleButton"
       data-typewriter-mode-btn
       class="p-1.5 rounded hover:bg-[var(--theme-bg-hover)] text-[var(--theme-text-muted)]"
       title="<%= t('header.toggle_typewriter') %>"

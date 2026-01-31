@@ -5,21 +5,14 @@ import { findTableAtPosition, findCodeBlockAtPosition } from "lib/markdown_utils
 import { allExtensions } from "lib/marked_extensions"
 import { encodePath } from "lib/url_utils"
 import { flattenTree } from "lib/tree_utils"
-import {
-  LINE_NUMBER_MODES,
-  normalizeLineNumberMode,
-  nextLineNumberMode,
-  buildRelativeLineLabels,
-  buildAbsoluteLineLabels
-} from "lib/line_numbers"
+import { LINE_NUMBER_MODES, normalizeLineNumberMode } from "lib/line_numbers"
 import { parseIndentSetting, indentLines, unindentLines } from "lib/indent_utils"
 import {
   getLineBoundaries,
   getCursorInfo as getTextCursorInfo,
   getPositionForLine
 } from "lib/text_editor_utils"
-import { calculateScrollForLine, calculateLineFromScroll } from "lib/scroll_utils"
-import { calculateTypewriterScroll, getTypewriterSyncData } from "lib/typewriter_utils"
+import { calculateScrollForLine } from "lib/scroll_utils"
 
 export default class extends Controller {
   static targets = [
@@ -36,8 +29,6 @@ export default class extends Controller {
     "sidebar",
     "sidebarToggle",
     "aiButton",
-    "lineNumberGutter",
-    "lineNumbers",
     "editorWrapper",
     "editorBody"
   ]
@@ -80,19 +71,17 @@ export default class extends Controller {
     // Sidebar/Explorer visibility
     this.sidebarVisible = settings.sidebar_visible !== false
 
-    // Typewriter mode - focused writing mode
+    // Typewriter mode - tracked for coordination (actual state in typewriter controller)
     this.typewriterModeEnabled = settings.typewriter_mode === true
 
     // Editor indent setting: 0 = tab, 1-6 = spaces (default 2)
     this.editorIndent = parseIndentSetting(settings.editor_indent)
 
+    // Line number mode - tracked for config reload (actual state in line-numbers controller)
     this.lineNumberMode = normalizeLineNumberMode(
       settings.editor_line_numbers,
       LINE_NUMBER_MODES.OFF
     )
-    this.lineNumberMirror = null
-    this.lineNumberUpdateHandle = null
-    this.lineNumberResizeObserver = null
 
     // Track pending config saves to debounce
     this.configSaveTimeout = null
@@ -105,13 +94,12 @@ export default class extends Controller {
     this.setupDialogClickOutside()
     this.setupSyncScroll()
     this.applyEditorSettings()
-    this.setupLineNumbers()
     this.applyPreviewZoom()
     this.applySidebarVisibility()
-    this.applyTypewriterMode()
+    this.initializeTypewriterMode()
+    this.initializeLineNumbers()
     this.setupConfigFileListener()
     this.setupTableEditorListener()
-    this.setupPathResizeListener()
 
     // Configure marked with custom extensions for superscript, subscript, highlight, emoji
     marked.use({
@@ -145,23 +133,9 @@ export default class extends Controller {
     if (this.boundKeydownHandler) {
       document.removeEventListener("keydown", this.boundKeydownHandler)
     }
-    if (this.boundPathResizeHandler) {
-      window.removeEventListener("resize", this.boundPathResizeHandler)
-    }
 
     // Clean up object URLs to prevent memory leaks
     this.cleanupLocalFolderImages()
-
-    if (this.lineNumberResizeObserver) {
-      this.lineNumberResizeObserver.disconnect()
-    }
-    if (this.lineNumberMirror) {
-      this.lineNumberMirror.remove()
-      this.lineNumberMirror = null
-    }
-    if (this.lineNumberUpdateHandle) {
-      cancelAnimationFrame(this.lineNumberUpdateHandle)
-    }
 
     // Abort any pending AI requests
     if (this.aiImageAbortController) {
@@ -169,7 +143,86 @@ export default class extends Controller {
     }
   }
 
-  // URL Management for Bookmarkable URLs
+  // === Controller Getters ===
+
+  getPreviewController() {
+    const previewElement = document.querySelector('[data-controller~="preview"]')
+    if (previewElement) {
+      return this.application.getControllerForElementAndIdentifier(previewElement, "preview")
+    }
+    return null
+  }
+
+  getLineNumbersController() {
+    const element = document.querySelector('[data-controller~="line-numbers"]')
+    if (element) {
+      return this.application.getControllerForElementAndIdentifier(element, "line-numbers")
+    }
+    return null
+  }
+
+  getTypewriterController() {
+    const element = document.querySelector('[data-controller~="typewriter"]')
+    if (element) {
+      return this.application.getControllerForElementAndIdentifier(element, "typewriter")
+    }
+    return null
+  }
+
+  getPathDisplayController() {
+    const element = document.querySelector('[data-controller~="path-display"]')
+    if (element) {
+      return this.application.getControllerForElementAndIdentifier(element, "path-display")
+    }
+    return null
+  }
+
+  getDragDropController() {
+    const element = document.querySelector('[data-controller~="drag-drop"]')
+    if (element) {
+      return this.application.getControllerForElementAndIdentifier(element, "drag-drop")
+    }
+    return null
+  }
+
+  getTextFormatController() {
+    const textFormatElement = document.querySelector('[data-controller~="text-format"]')
+    if (textFormatElement) {
+      return this.application.getControllerForElementAndIdentifier(textFormatElement, "text-format")
+    }
+    return null
+  }
+
+  getHelpController() {
+    const helpElement = document.querySelector('[data-controller~="help"]')
+    if (helpElement) {
+      return this.application.getControllerForElementAndIdentifier(helpElement, "help")
+    }
+    return null
+  }
+
+  getStatsPanelController() {
+    const statsPanelElement = document.querySelector('[data-controller~="stats-panel"]')
+    if (statsPanelElement) {
+      return this.application.getControllerForElementAndIdentifier(statsPanelElement, "stats-panel")
+    }
+    return null
+  }
+
+  getFileOperationsController() {
+    const element = document.querySelector('[data-controller~="file-operations"]')
+    return element ? this.application.getControllerForElementAndIdentifier(element, "file-operations") : null
+  }
+
+  getEmojiPickerController() {
+    const emojiPickerElement = document.querySelector('[data-controller~="emoji-picker"]')
+    if (emojiPickerElement) {
+      return this.application.getControllerForElementAndIdentifier(emojiPickerElement, "emoji-picker")
+    }
+    return null
+  }
+
+  // === URL Management for Bookmarkable URLs ===
 
   handleInitialFile() {
     // Check if server provided initial note data (from URL like /notes/path/to/file.md)
@@ -284,7 +337,7 @@ export default class extends Controller {
     }, 5000)
   }
 
-  // Tree Rendering
+  // === Tree Rendering ===
   renderTree() {
     this.fileTreeTarget.innerHTML = this.buildTreeHTML(this.treeValue)
   }
@@ -303,7 +356,7 @@ export default class extends Controller {
         return `
           <div class="tree-folder" data-path="${escapeHtml(item.path)}">
             <div class="tree-item drop-target" draggable="true"
-              data-action="click->app#toggleFolder contextmenu->app#showContextMenu dragstart->app#onDragStart dragover->app#onDragOver dragenter->app#onDragEnter dragleave->app#onDragLeave drop->app#onDrop dragend->app#onDragEnd"
+              data-action="click->app#toggleFolder contextmenu->app#showContextMenu dragstart->drag-drop#onDragStart dragover->drag-drop#onDragOver dragenter->drag-drop#onDragEnter dragleave->drag-drop#onDragLeave drop->drag-drop#onDrop dragend->drag-drop#onDragEnd"
               data-path="${escapeHtml(item.path)}" data-type="folder">
               <svg class="tree-chevron ${isExpanded ? 'expanded' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
@@ -330,7 +383,7 @@ export default class extends Controller {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>`
         // Config files should not be draggable or have context menu
-        const dragAttrs = isConfig ? '' : 'draggable="true" data-action="click->app#selectFile contextmenu->app#showContextMenu dragstart->app#onDragStart dragend->app#onDragEnd"'
+        const dragAttrs = isConfig ? '' : 'draggable="true" data-action="click->app#selectFile contextmenu->app#showContextMenu dragstart->drag-drop#onDragStart dragend->drag-drop#onDragEnd"'
         const clickAction = isConfig ? 'data-action="click->app#selectFile"' : ''
         return `
           <div class="tree-item ${isSelected ? 'selected' : ''}" ${isConfig ? clickAction : dragAttrs}
@@ -360,181 +413,31 @@ export default class extends Controller {
     }
   }
 
-  // Drag and Drop
-  onDragStart(event) {
-    const target = event.currentTarget
-    this.draggedItem = {
-      path: target.dataset.path,
-      type: target.dataset.type
+  // === Drag and Drop Event Handler ===
+  // Handle item moved event from drag-drop controller
+  async onItemMoved(event) {
+    const { oldPath, newPath, type } = event.detail
+
+    // Update current file reference if it was moved
+    if (this.currentFile === oldPath) {
+      this.currentFile = newPath
+      this.updatePathDisplay(newPath.replace(/\.md$/, ""))
+    } else if (type === "folder" && this.currentFile && this.currentFile.startsWith(oldPath + "/")) {
+      // If a folder containing the current file was moved
+      this.currentFile = this.currentFile.replace(oldPath, newPath)
+      this.updatePathDisplay(this.currentFile.replace(/\.md$/, ""))
     }
-    event.dataTransfer.effectAllowed = "move"
-    event.dataTransfer.setData("text/plain", target.dataset.path)
-    target.classList.add("dragging")
 
-    // Add a slight delay to show the dragging state
-    setTimeout(() => {
-      target.classList.add("drag-ghost")
-    }, 0)
-  }
-
-  onDragEnd(event) {
-    event.currentTarget.classList.remove("dragging", "drag-ghost")
-    this.draggedItem = null
-
-    // Remove all drop highlights
-    this.fileTreeTarget.querySelectorAll(".drop-highlight").forEach(el => {
-      el.classList.remove("drop-highlight")
-    })
-    this.fileTreeTarget.classList.remove("drop-highlight-root")
-  }
-
-  onDragOver(event) {
-    event.preventDefault()
-    event.dataTransfer.dropEffect = "move"
-  }
-
-  onDragEnter(event) {
-    event.preventDefault()
-    const target = event.currentTarget
-
-    if (!this.draggedItem) return
-
-    // Don't allow dropping on itself or its children
-    if (this.draggedItem.path === target.dataset.path) return
-    if (target.dataset.path.startsWith(this.draggedItem.path + "/")) return
-
-    // Only folders are valid drop targets
-    if (target.dataset.type === "folder") {
-      target.classList.add("drop-highlight")
+    // Expand the target folder
+    const targetFolder = newPath.split("/").slice(0, -1).join("/")
+    if (targetFolder) {
+      this.expandedFolders.add(targetFolder)
     }
+
+    await this.refreshTree()
   }
 
-  onDragLeave(event) {
-    const target = event.currentTarget
-    // Check if we're actually leaving the element (not just entering a child)
-    const rect = target.getBoundingClientRect()
-    const x = event.clientX
-    const y = event.clientY
-
-    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-      target.classList.remove("drop-highlight")
-    }
-  }
-
-  async onDrop(event) {
-    event.preventDefault()
-    event.stopPropagation()
-
-    const target = event.currentTarget
-    target.classList.remove("drop-highlight")
-
-    if (!this.draggedItem) return
-    if (target.dataset.type !== "folder") return
-
-    const sourcePath = this.draggedItem.path
-    const targetFolder = target.dataset.path
-
-    // Don't drop on itself or its parent
-    if (sourcePath === targetFolder) return
-    if (sourcePath.startsWith(targetFolder + "/")) return
-
-    // Get the item name
-    const itemName = sourcePath.split("/").pop()
-    const newPath = `${targetFolder}/${itemName}`
-
-    // Don't move to same location
-    const currentParent = sourcePath.split("/").slice(0, -1).join("/")
-    if (currentParent === targetFolder) return
-
-    await this.moveItem(sourcePath, newPath, this.draggedItem.type)
-  }
-
-  onDragOverRoot(event) {
-    event.preventDefault()
-    event.dataTransfer.dropEffect = "move"
-  }
-
-  onDragEnterRoot(event) {
-    event.preventDefault()
-    if (!this.draggedItem) return
-
-    // Only highlight if the item is not already at root
-    if (this.draggedItem.path.includes("/")) {
-      this.fileTreeTarget.classList.add("drop-highlight-root")
-    }
-  }
-
-  onDragLeaveRoot(event) {
-    // Only remove highlight if we're leaving the file tree entirely
-    const rect = this.fileTreeTarget.getBoundingClientRect()
-    const x = event.clientX
-    const y = event.clientY
-
-    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-      this.fileTreeTarget.classList.remove("drop-highlight-root")
-    }
-  }
-
-  async onDropToRoot(event) {
-    event.preventDefault()
-    event.stopPropagation()
-
-    this.fileTreeTarget.classList.remove("drop-highlight-root")
-
-    if (!this.draggedItem) return
-
-    const sourcePath = this.draggedItem.path
-
-    // If already at root, do nothing
-    if (!sourcePath.includes("/")) return
-
-    const itemName = sourcePath.split("/").pop()
-    const newPath = itemName
-
-    await this.moveItem(sourcePath, newPath, this.draggedItem.type)
-  }
-
-  async moveItem(oldPath, newPath, type) {
-    try {
-      const endpoint = type === "file" ? "notes" : "folders"
-      const response = await fetch(`/${endpoint}/${encodePath(oldPath)}/rename`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": this.csrfToken
-        },
-        body: JSON.stringify({ new_path: newPath })
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || window.t("errors.failed_to_move"))
-      }
-
-      // Update current file reference if it was moved
-      if (this.currentFile === oldPath) {
-        this.currentFile = newPath
-        this.updatePathDisplay(newPath.replace(/\.md$/, ""))
-      } else if (type === "folder" && this.currentFile && this.currentFile.startsWith(oldPath + "/")) {
-        // If a folder containing the current file was moved
-        this.currentFile = this.currentFile.replace(oldPath, newPath)
-        this.updatePathDisplay(this.currentFile.replace(/\.md$/, ""))
-      }
-
-      // Expand the target folder
-      const targetFolder = newPath.split("/").slice(0, -1).join("/")
-      if (targetFolder) {
-        this.expandedFolders.add(targetFolder)
-      }
-
-      await this.refreshTree()
-    } catch (error) {
-      console.error("Error moving item:", error)
-      alert(error.message)
-    }
-  }
-
-  // File Selection and Editor
+  // === File Selection and Editor ===
   async selectFile(event) {
     const path = event.currentTarget.dataset.path
     await this.loadFile(path)
@@ -647,34 +550,14 @@ export default class extends Controller {
   onTextareaScroll() {
     this.syncLineNumberScroll()
     // Sync preview scroll
-    if (this.typewriterModeEnabled) {
-      this.syncPreviewScrollTypewriter()
-    } else {
-      this.syncPreviewScroll()
-    }
-  }
-
-  // Sync preview scroll in typewriter mode based on visible content
-  syncPreviewScrollTypewriter() {
-    if (!this.syncScrollEnabled) return
-    if (!this.hasTextareaTarget) return
-
     const previewController = this.getPreviewController()
-    if (!previewController || !previewController.isVisible) return
-
-    const textarea = this.textareaTarget
-    const content = textarea.value
-    const totalLines = content.split("\n").length
-
-    // Calculate which line is at the center of visible area using utility function
-    const centerLine = calculateLineFromScroll(
-      textarea.scrollTop,
-      textarea.clientHeight,
-      textarea.scrollHeight,
-      totalLines
-    )
-
-    previewController.syncToTypewriter(centerLine, totalLines)
+    if (previewController && previewController.isVisible && this.hasTextareaTarget) {
+      if (this.typewriterModeEnabled) {
+        previewController.syncScrollTypewriter(this.textareaTarget)
+      } else {
+        previewController.syncFromEditorScroll(this.textareaTarget)
+      }
+    }
   }
 
   // Update preview and sync scroll to cursor position
@@ -686,36 +569,10 @@ export default class extends Controller {
     const content = this.textareaTarget.value
     const cursorPos = this.textareaTarget.selectionStart
 
-    // Calculate cursor line info
-    const textBeforeCursor = content.substring(0, cursorPos)
-    const currentLine = textBeforeCursor.split("\n").length
-    const totalLines = content.split("\n").length
-
-    // Only sync scroll when line changes (prevents jitter from typing on same line)
-    const lineChanged = this._lastSyncedLine !== currentLine ||
-                        this._lastSyncedTotalLines !== totalLines
-
-    // Debounce preview render to reduce DOM thrashing
-    if (this._previewRenderTimeout) {
-      clearTimeout(this._previewRenderTimeout)
-    }
-
-    this._previewRenderTimeout = setTimeout(() => {
-      // Build scroll data - only sync scroll if line changed
-      const scrollData = {
-        typewriterMode: this.typewriterModeEnabled,
-        currentLine,
-        totalLines,
-        syncToCursor: lineChanged
-      }
-
-      previewController.update(content, scrollData)
-
-      if (lineChanged) {
-        this._lastSyncedLine = currentLine
-        this._lastSyncedTotalLines = totalLines
-      }
-    }, 50) // Small debounce for render
+    previewController.updateWithSync(content, {
+      cursorPos,
+      typewriterMode: this.typewriterModeEnabled
+    })
   }
 
   // Check if cursor is in a markdown table
@@ -820,8 +677,10 @@ export default class extends Controller {
         }
       }
       if (this.lineNumberMode !== oldLineNumberMode) {
-        this.applyLineNumberMode()
-        this.scheduleLineNumberUpdate()
+        const lineNumbersController = this.getLineNumbersController()
+        if (lineNumbersController) {
+          lineNumbersController.setMode(this.lineNumberMode)
+        }
       }
 
       // Notify theme controller to reload (dispatch custom event)
@@ -846,7 +705,7 @@ export default class extends Controller {
     this.saveStatusTarget.classList.toggle("dark:text-red-400", isError)
   }
 
-  // Preview Panel - Delegates to preview_controller
+  // === Preview Panel - Delegates to preview_controller ===
   togglePreview() {
     // Only allow preview for markdown files
     if (!this.isMarkdownFile()) {
@@ -858,15 +717,6 @@ export default class extends Controller {
     if (previewController) {
       previewController.toggle()
     }
-  }
-
-  // Get the preview controller instance
-  getPreviewController() {
-    const previewElement = document.querySelector('[data-controller~="preview"]')
-    if (previewElement) {
-      return this.application.getControllerForElementAndIdentifier(previewElement, "preview")
-    }
-    return null
   }
 
   updatePreview() {
@@ -891,7 +741,10 @@ export default class extends Controller {
   setupSyncScroll() {
     if (!this.hasTextareaTarget) return
 
-    // Note: scroll sync is handled by onTextareaScroll via data-action
+    const previewController = this.getPreviewController()
+    if (previewController) {
+      previewController.setupEditorSync(this.textareaTarget)
+    }
 
     // Sync on cursor position changes (selection change)
     this.textareaTarget.addEventListener("click", () => {
@@ -914,42 +767,14 @@ export default class extends Controller {
     })
   }
 
-  syncPreviewScroll() {
-    if (!this.syncScrollEnabled) return
-    if (!this.hasTextareaTarget) return
-
-    const previewController = this.getPreviewController()
-    if (!previewController || !previewController.isVisible) return
-
-    const textarea = this.textareaTarget
-    const scrollTop = textarea.scrollTop
-    const scrollHeight = textarea.scrollHeight - textarea.clientHeight
-
-    if (scrollHeight <= 0) return
-
-    const scrollRatio = scrollTop / scrollHeight
-    previewController.syncScrollRatio(scrollRatio)
-  }
-
   syncPreviewScrollToCursor() {
-    if (!this.syncScrollEnabled) return
-    if (!this.hasTextareaTarget) return
-
     const previewController = this.getPreviewController()
-    if (!previewController || !previewController.isVisible) return
-
-    const textarea = this.textareaTarget
-    const content = textarea.value
-    const cursorPos = textarea.selectionStart
-
-    const textBeforeCursor = content.substring(0, cursorPos)
-    const linesBefore = textBeforeCursor.split("\n").length
-    const totalLines = content.split("\n").length
-
-    previewController.syncToLine(linesBefore, totalLines)
+    if (previewController) {
+      previewController.syncToCursor()
+    }
   }
 
-  // Table Editor - dispatches event for table_editor_controller to handle
+  // === Table Editor ===
   openTableEditor() {
     let existingTable = null
     let startPos = 0
@@ -978,21 +803,6 @@ export default class extends Controller {
   setupTableEditorListener() {
     this.boundTableInsertHandler = this.handleTableInsert.bind(this)
     window.addEventListener("frankmd:insert-table", this.boundTableInsertHandler)
-  }
-
-  // Setup resize listener to recalculate path display
-  setupPathResizeListener() {
-    this.boundPathResizeHandler = this.debounce(() => this.handlePathResize(), 100)
-    window.addEventListener("resize", this.boundPathResizeHandler)
-  }
-
-  // Simple debounce helper
-  debounce(func, wait) {
-    let timeout
-    return (...args) => {
-      clearTimeout(timeout)
-      timeout = setTimeout(() => func.apply(this, args), wait)
-    }
   }
 
   // Handle table insertion from table_editor_controller
@@ -1035,7 +845,7 @@ export default class extends Controller {
     this.updatePreview()
   }
 
-  // Image Picker Event Handler - receives events from image_picker_controller
+  // === Image Picker Event Handler ===
   onImageSelected(event) {
     const { markdown } = event.detail
     if (!markdown || !this.hasTextareaTarget) return
@@ -1067,7 +877,6 @@ export default class extends Controller {
 
   // Open image picker dialog (delegates to image-picker controller)
   openImagePicker() {
-    // Find and open the image picker controller's dialog
     const imagePickerElement = document.querySelector('[data-controller~="image-picker"]')
     if (imagePickerElement) {
       const imagePickerController = this.application.getControllerForElementAndIdentifier(
@@ -1080,7 +889,7 @@ export default class extends Controller {
     }
   }
 
-  // Editor Customization - Delegates to customize_controller
+  // === Editor Customization - Delegates to customize_controller ===
   openCustomize() {
     const customizeElement = document.querySelector('[data-controller~="customize"]')
     if (customizeElement) {
@@ -1120,164 +929,53 @@ export default class extends Controller {
     this.scheduleLineNumberUpdate()
   }
 
-  setupLineNumbers() {
-    if (!this.hasLineNumberGutterTarget || !this.hasLineNumbersTarget || !this.hasTextareaTarget) return
+  // === Line Numbers - Delegates to line_numbers_controller ===
 
-    this.ensureLineNumberMirror()
-    this.applyLineNumberMode()
-    this.scheduleLineNumberUpdate()
-
-    if (typeof ResizeObserver !== "undefined") {
-      this.lineNumberResizeObserver = new ResizeObserver(() => {
-        this.scheduleLineNumberUpdate()
-      })
-      this.lineNumberResizeObserver.observe(this.textareaTarget)
+  initializeLineNumbers() {
+    const lineNumbersController = this.getLineNumbersController()
+    if (lineNumbersController) {
+      lineNumbersController.setMode(this.lineNumberMode)
     }
   }
 
-  applyLineNumberMode() {
-    if (!this.hasLineNumberGutterTarget) return
-    const isVisible = this.lineNumberMode !== LINE_NUMBER_MODES.OFF
-    this.lineNumberGutterTarget.classList.toggle("hidden", !isVisible)
-    if (!isVisible && this.hasLineNumbersTarget) {
-      this.lineNumbersTarget.textContent = ""
+  scheduleLineNumberUpdate() {
+    const lineNumbersController = this.getLineNumbersController()
+    if (lineNumbersController) {
+      lineNumbersController.scheduleUpdate()
+    }
+  }
+
+  syncLineNumberScroll() {
+    const lineNumbersController = this.getLineNumbersController()
+    if (lineNumbersController) {
+      lineNumbersController.syncScroll()
     }
   }
 
   toggleLineNumberMode() {
-    this.lineNumberMode = nextLineNumberMode(this.lineNumberMode)
-    this.saveConfig({ editor_line_numbers: this.lineNumberMode })
-    this.applyLineNumberMode()
-    this.scheduleLineNumberUpdate()
-  }
-
-  scheduleLineNumberUpdate() {
-    if (!this.hasLineNumberGutterTarget || !this.hasLineNumbersTarget || !this.hasTextareaTarget) return
-    if (this.lineNumberMode === LINE_NUMBER_MODES.OFF) return
-
-    if (this.lineNumberUpdateHandle) {
-      cancelAnimationFrame(this.lineNumberUpdateHandle)
+    const lineNumbersController = this.getLineNumbersController()
+    if (lineNumbersController) {
+      lineNumbersController.toggle()
     }
-
-    this.lineNumberUpdateHandle = requestAnimationFrame(() => {
-      this.updateLineNumbers()
-    })
   }
 
-  updateLineNumbers() {
-    if (!this.hasLineNumberGutterTarget || !this.hasLineNumbersTarget || !this.hasTextareaTarget) return
-    if (this.lineNumberMode === LINE_NUMBER_MODES.OFF) return
+  // Handle line-numbers:mode-changed event
+  onLineNumberModeChanged(event) {
+    const { mode } = event.detail
+    this.lineNumberMode = mode
+    this.saveConfig({ editor_line_numbers: mode })
+  }
 
-    this.lineNumberUpdateHandle = null
+  // === Path Display - Delegates to path_display_controller ===
 
-    const { totalVisualLines, cursorVisualIndex, visualCountsPerLine } = this.getVisualLineMetrics()
-    const labels = this.lineNumberMode === LINE_NUMBER_MODES.RELATIVE
-      ? buildRelativeLineLabels(totalVisualLines, cursorVisualIndex)
-      : buildAbsoluteLineLabels(visualCountsPerLine)
-
-    const textareaStyle = window.getComputedStyle(this.textareaTarget)
-    this.lineNumbersTarget.style.lineHeight = textareaStyle.lineHeight
-    this.lineNumbersTarget.style.fontFamily = textareaStyle.fontFamily
-    this.lineNumbersTarget.textContent = labels.join("\n")
-
-    let labelWidth = String(Math.max(visualCountsPerLine.length, 1)).length
-    if (this.lineNumberMode === LINE_NUMBER_MODES.RELATIVE) {
-      const maxDistance = Math.max(cursorVisualIndex, totalVisualLines - 1 - cursorVisualIndex)
-      labelWidth = String(maxDistance).length + (maxDistance > 0 ? 1 : 0)
+  updatePathDisplay(path) {
+    const pathDisplayController = this.getPathDisplayController()
+    if (pathDisplayController) {
+      pathDisplayController.update(path)
     }
-    const digits = Math.max(2, labelWidth)
-    this.lineNumberGutterTarget.style.width = `calc(${digits}ch + 1.5rem)`
-
-    this.syncLineNumberScroll()
   }
 
-  syncLineNumberScroll() {
-    if (!this.hasLineNumbersTarget || !this.hasTextareaTarget) return
-    if (this.lineNumberMode === LINE_NUMBER_MODES.OFF) return
-
-    const scrollTop = this.textareaTarget.scrollTop
-    this.lineNumbersTarget.style.transform = `translateY(-${scrollTop}px)`
-  }
-
-  getVisualLineMetrics() {
-    this.ensureLineNumberMirror()
-    this.updateLineNumberMirrorStyle()
-
-    const value = this.textareaTarget.value
-    const cursorPos = this.textareaTarget.selectionStart || 0
-    const lineHeight = this.getTextareaLineHeight()
-    const textareaStyle = window.getComputedStyle(this.textareaTarget)
-    const paddingTop = parseFloat(textareaStyle.paddingTop) || 0
-    const paddingBottom = parseFloat(textareaStyle.paddingBottom) || 0
-
-    const lines = value.split("\n")
-    const beforeCursor = value.slice(0, cursorPos)
-    const currentLineIndex = beforeCursor.split("\n").length - 1
-    const lastNewlineIndex = beforeCursor.lastIndexOf("\n")
-    const columnIndex = beforeCursor.length - (lastNewlineIndex + 1)
-
-    const measureLine = (text) => {
-      const content = text.length ? text : "\u200b"
-      this.lineNumberMirror.textContent = content
-      const contentHeight = Math.max(0, this.lineNumberMirror.scrollHeight - paddingTop - paddingBottom)
-      return Math.max(1, Math.round(contentHeight / lineHeight))
-    }
-
-    const visualCountsPerLine = lines.map(measureLine)
-    const totalVisualLines = visualCountsPerLine.reduce((sum, count) => sum + count, 0)
-
-    const visualLinesBefore = visualCountsPerLine.slice(0, currentLineIndex).reduce((sum, count) => sum + count, 0)
-    const currentLineText = lines[currentLineIndex] || ""
-    const currentLinePrefix = currentLineText.slice(0, columnIndex)
-    const cursorOffset = Math.max(0, measureLine(currentLinePrefix) - 1)
-    const cursorVisualIndex = Math.min(totalVisualLines - 1, visualLinesBefore + cursorOffset)
-
-    return { totalVisualLines, cursorVisualIndex, visualCountsPerLine }
-  }
-
-  getTextareaLineHeight() {
-    const style = window.getComputedStyle(this.textareaTarget)
-    const lineHeight = parseFloat(style.lineHeight)
-    if (!Number.isFinite(lineHeight)) {
-      const fontSize = parseFloat(style.fontSize) || 14
-      return fontSize * 1.5
-    }
-    return lineHeight
-  }
-
-  ensureLineNumberMirror() {
-    if (this.lineNumberMirror) return
-
-    const mirror = document.createElement("div")
-    mirror.setAttribute("aria-hidden", "true")
-    mirror.style.position = "absolute"
-    mirror.style.top = "0"
-    mirror.style.left = "-9999px"
-    mirror.style.visibility = "hidden"
-    mirror.style.pointerEvents = "none"
-    mirror.style.whiteSpace = "pre-wrap"
-    mirror.style.wordBreak = "break-word"
-    mirror.style.overflowWrap = "break-word"
-    mirror.style.boxSizing = "border-box"
-
-    document.body.appendChild(mirror)
-    this.lineNumberMirror = mirror
-  }
-
-  updateLineNumberMirrorStyle() {
-    const style = window.getComputedStyle(this.textareaTarget)
-
-    this.lineNumberMirror.style.width = `${this.textareaTarget.clientWidth}px`
-    this.lineNumberMirror.style.fontFamily = style.fontFamily
-    this.lineNumberMirror.style.fontSize = style.fontSize
-    this.lineNumberMirror.style.fontWeight = style.fontWeight
-    this.lineNumberMirror.style.lineHeight = style.lineHeight
-    this.lineNumberMirror.style.letterSpacing = style.letterSpacing
-    this.lineNumberMirror.style.padding = style.padding
-    this.lineNumberMirror.style.tabSize = style.tabSize
-  }
-
-  // Save config settings to server (debounced)
+  // === Save config settings to server (debounced) ===
   saveConfig(settings) {
     // Clear any pending save
     if (this.configSaveTimeout) {
@@ -1344,8 +1042,7 @@ export default class extends Controller {
     window.addEventListener("frankmd:config-file-modified", this.boundConfigFileHandler)
   }
 
-  // Preview Zoom - Delegates to preview_controller
-  // These methods are kept for backwards compatibility and keyboard shortcuts
+  // === Preview Zoom - Delegates to preview_controller ===
   zoomPreviewIn() {
     const previewController = this.getPreviewController()
     if (previewController) {
@@ -1367,7 +1064,7 @@ export default class extends Controller {
     }
   }
 
-  // Sidebar/Explorer Toggle
+  // === Sidebar/Explorer Toggle ===
   toggleSidebar() {
     this.sidebarVisible = !this.sidebarVisible
     this.saveConfig({ sidebar_visible: this.sidebarVisible })
@@ -1379,120 +1076,20 @@ export default class extends Controller {
       this.sidebarTarget.classList.toggle("hidden", !this.sidebarVisible)
     }
     if (this.hasSidebarToggleTarget) {
-      // Update toggle button icon state if needed
       this.sidebarToggleTarget.setAttribute("aria-expanded", this.sidebarVisible.toString())
     }
     this.scheduleLineNumberUpdate()
   }
 
-  // Copy current file path to clipboard
-  copyPathToClipboard() {
-    const fullPath = this.currentPathTarget.dataset.fullPath
-    if (!fullPath) return
+  // === Typewriter Mode - Delegates to typewriter_controller ===
 
-    navigator.clipboard.writeText(fullPath).then(() => {
-      // Show copied feedback
-      const container = this.currentPathTarget.closest(".path-container")
-      if (container) {
-        container.dataset.copiedText = window.t("status.copied")
-        container.classList.add("copied")
-        setTimeout(() => {
-          container.classList.remove("copied")
-        }, 1500)
-      }
-    }).catch(err => {
-      console.error("Failed to copy path:", err)
-    })
-  }
-
-  // Update path display with smart truncation from the left
-  updatePathDisplay(path) {
-    if (!this.hasCurrentPathTarget) return
-
-    const container = this.currentPathTarget.closest(".path-container")
-    const wrapper = container?.parentElement // The flex-1 parent that has actual width
-
-    if (!path) {
-      this.currentPathTarget.textContent = window.t("editor.select_note")
-      this.currentPathTarget.dataset.fullPath = ""
-      if (container) container.classList.remove("truncated")
-      return
-    }
-
-    // Store full path for hover and copy
-    this.currentPathTarget.dataset.fullPath = path
-
-    // Measure available width from the wrapper (flex-1 container)
-    // Subtract some padding for the save status and margins
-    const availableWidth = wrapper ? (wrapper.clientWidth - 20) : 300
-
-    // Create a temporary span to measure text width
-    const measureSpan = document.createElement("span")
-    measureSpan.style.cssText = "visibility:hidden;position:absolute;white-space:nowrap;font:inherit;"
-    measureSpan.className = this.currentPathTarget.className
-    document.body.appendChild(measureSpan)
-
-    measureSpan.textContent = path
-    const fullWidth = measureSpan.offsetWidth
-
-    if (fullWidth <= availableWidth) {
-      // Path fits - show full path, left-aligned
-      this.currentPathTarget.textContent = path
-      if (container) container.classList.remove("truncated")
-    } else {
-      // Path doesn't fit - truncate from left with "..."
-      const ellipsis = "..."
-      let truncatedPath = path
-
-      // Progressively remove path segments from the left
-      const parts = path.split("/")
-      for (let i = 1; i < parts.length; i++) {
-        truncatedPath = ellipsis + parts.slice(i).join("/")
-        measureSpan.textContent = truncatedPath
-        if (measureSpan.offsetWidth <= availableWidth) {
-          break
-        }
-      }
-
-      this.currentPathTarget.textContent = truncatedPath
-      if (container) container.classList.add("truncated")
-    }
-
-    document.body.removeChild(measureSpan)
-  }
-
-  // Recalculate path display on resize
-  handlePathResize() {
-    const fullPath = this.currentPathTarget?.dataset?.fullPath
-    if (fullPath) {
-      this.updatePathDisplay(fullPath)
+  initializeTypewriterMode() {
+    const typewriterController = this.getTypewriterController()
+    if (typewriterController) {
+      typewriterController.setEnabled(this.typewriterModeEnabled)
     }
   }
 
-  // Show full path on hover (when truncated)
-  showFullPath() {
-    if (!this.hasCurrentPathTarget) return
-    const container = this.currentPathTarget.closest(".path-container")
-    if (!container?.classList.contains("truncated")) return
-
-    const fullPath = this.currentPathTarget.dataset.fullPath
-    if (fullPath) {
-      this.currentPathTarget.textContent = fullPath
-    }
-  }
-
-  // Restore truncated path after hover
-  hideFullPath() {
-    if (!this.hasCurrentPathTarget) return
-    const fullPath = this.currentPathTarget.dataset.fullPath
-    if (fullPath) {
-      this.updatePathDisplay(fullPath)
-    }
-  }
-
-  // Typewriter Mode - focused writing mode
-  // OFF: explorer open, preview closed, normal scrolling
-  // ON: explorer hidden, preview open, cursor kept in middle of editor
   toggleTypewriterMode() {
     // Only allow typewriter mode for markdown files
     if (!this.isMarkdownFile()) {
@@ -1500,56 +1097,26 @@ export default class extends Controller {
       return
     }
 
-    this.typewriterModeEnabled = !this.typewriterModeEnabled
-    this.saveConfig({ typewriter_mode: this.typewriterModeEnabled })
-    this.applyTypewriterMode()
-
-    // Immediately apply typewriter scroll if enabling
-    if (this.typewriterModeEnabled) {
-      this.maintainTypewriterScroll()
+    const typewriterController = this.getTypewriterController()
+    if (typewriterController) {
+      typewriterController.toggle()
     }
   }
 
-  // Show a temporary message to the user (auto-dismisses)
-  showTemporaryMessage(message, duration = 2000) {
-    // Remove any existing message
-    const existing = document.querySelector(".temporary-message")
-    if (existing) existing.remove()
-
-    const el = document.createElement("div")
-    el.className = "temporary-message fixed bottom-4 left-1/2 -translate-x-1/2 bg-[var(--theme-bg-secondary)] text-[var(--theme-text-primary)] px-4 py-2 rounded-lg shadow-lg border border-[var(--theme-border)] text-sm z-50"
-    el.textContent = message
-    document.body.appendChild(el)
-
-    setTimeout(() => el.remove(), duration)
-  }
-
-  applyTypewriterMode() {
-    if (this.hasTextareaTarget) {
-      this.textareaTarget.classList.toggle("typewriter-mode", this.typewriterModeEnabled)
-    }
-    if (this.hasEditorWrapperTarget) {
-      this.editorWrapperTarget.classList.toggle("typewriter-centered", this.typewriterModeEnabled)
-    }
-    if (this.hasEditorBodyTarget) {
-      this.editorBodyTarget.classList.toggle("typewriter-centered", this.typewriterModeEnabled)
-    }
+  // Handle typewriter:toggled event
+  onTypewriterToggled(event) {
+    const { enabled } = event.detail
+    this.typewriterModeEnabled = enabled
+    this.saveConfig({ typewriter_mode: enabled })
 
     // Toggle typewriter mode on preview controller
     const previewController = this.getPreviewController()
     if (previewController) {
-      previewController.setTypewriterMode(this.typewriterModeEnabled)
-    }
-
-    // Update toggle button state if exists
-    const typewriterBtn = this.element.querySelector("[data-typewriter-mode-btn]")
-    if (typewriterBtn) {
-      typewriterBtn.classList.toggle("bg-[var(--theme-bg-hover)]", this.typewriterModeEnabled)
-      typewriterBtn.setAttribute("aria-pressed", this.typewriterModeEnabled.toString())
+      previewController.setTypewriterMode(enabled)
     }
 
     // Typewriter mode controls explorer and preview visibility
-    if (this.typewriterModeEnabled) {
+    if (enabled) {
       // Hide explorer
       this.sidebarVisible = false
       this.applySidebarVisibility()
@@ -1575,83 +1142,39 @@ export default class extends Controller {
     this.saveConfig({ sidebar_visible: this.sidebarVisible })
   }
 
-  // Keep cursor at center (50%) of the editor in typewriter mode
   maintainTypewriterScroll() {
-    if (!this.typewriterModeEnabled) return
-    if (!this.hasTextareaTarget) return
+    const typewriterController = this.getTypewriterController()
+    if (typewriterController && typewriterController.isEnabled) {
+      typewriterController.maintainScroll()
 
-    const textarea = this.textareaTarget
-    const text = textarea.value
-    const cursorPos = textarea.selectionStart
-
-    // Use mirror div technique to get accurate cursor position
-    const cursorY = this.getCursorYPosition(textarea, cursorPos)
-
-    // Calculate desired scroll position using utility function
-    const desiredScrollTop = calculateTypewriterScroll(cursorY, textarea.clientHeight)
-
-    // Use setTimeout to ensure we run after all browser scroll behavior
-    setTimeout(() => {
-      textarea.scrollTop = desiredScrollTop
-
-      // Also sync preview if visible using utility function
+      // Also sync preview if visible
       const previewController = this.getPreviewController()
-      if (previewController && previewController.isVisible) {
-        const { currentLine, totalLines } = getTypewriterSyncData(text, cursorPos)
-        this.syncPreviewToTypewriter(currentLine, totalLines)
+      if (previewController && previewController.isVisible && this.hasTextareaTarget) {
+        const content = this.textareaTarget.value
+        const cursorPos = this.textareaTarget.selectionStart
+        const textBeforeCursor = content.substring(0, cursorPos)
+        const currentLine = textBeforeCursor.split("\n").length
+        const totalLines = content.split("\n").length
+        previewController.syncToTypewriter(currentLine, totalLines)
       }
-    }, 0)
-  }
-
-  // Get cursor Y position using mirror div technique
-  getCursorYPosition(textarea, cursorPos) {
-    // Create a mirror div that matches the textarea's styling
-    const mirror = document.createElement("div")
-    const style = window.getComputedStyle(textarea)
-
-    // Copy relevant styles
-    mirror.style.cssText = `
-      position: absolute;
-      top: -9999px;
-      left: -9999px;
-      width: ${textarea.clientWidth}px;
-      height: auto;
-      font-family: ${style.fontFamily};
-      font-size: ${style.fontSize};
-      font-weight: ${style.fontWeight};
-      line-height: ${style.lineHeight};
-      padding: ${style.padding};
-      border: ${style.border};
-      white-space: pre-wrap;
-      word-wrap: break-word;
-      overflow-wrap: break-word;
-    `
-
-    // Get text before cursor and add a marker span
-    const textBefore = textarea.value.substring(0, cursorPos)
-    mirror.textContent = textBefore
-
-    // Add a marker element at cursor position
-    const marker = document.createElement("span")
-    marker.textContent = "|"
-    mirror.appendChild(marker)
-
-    document.body.appendChild(mirror)
-    const cursorY = marker.offsetTop
-    document.body.removeChild(mirror)
-
-    return cursorY
-  }
-
-  // Sync preview scroll in typewriter mode - Delegates to preview_controller
-  syncPreviewToTypewriter(currentLine, totalLines) {
-    const previewController = this.getPreviewController()
-    if (previewController) {
-      previewController.syncToTypewriter(currentLine, totalLines)
     }
   }
 
-  // File Finder (Ctrl+P) - Delegates to file_finder_controller
+  // Show a temporary message to the user (auto-dismisses)
+  showTemporaryMessage(message, duration = 2000) {
+    // Remove any existing message
+    const existing = document.querySelector(".temporary-message")
+    if (existing) existing.remove()
+
+    const el = document.createElement("div")
+    el.className = "temporary-message fixed bottom-4 left-1/2 -translate-x-1/2 bg-[var(--theme-bg-secondary)] text-[var(--theme-text-primary)] px-4 py-2 rounded-lg shadow-lg border border-[var(--theme-border)] text-sm z-50"
+    el.textContent = message
+    document.body.appendChild(el)
+
+    setTimeout(() => el.remove(), duration)
+  }
+
+  // === File Finder (Ctrl+P) - Delegates to file_finder_controller ===
   openFileFinder() {
     // Build flat list of all files from tree
     const files = flattenTree(this.treeValue)
@@ -1837,7 +1360,7 @@ export default class extends Controller {
     textarea.scrollTop = targetScroll
   }
 
-  // Help Dialog - delegates to help controller
+  // === Help Dialog - delegates to help controller ===
   openHelp() {
     const helpController = this.getHelpController()
     if (helpController) {
@@ -1845,15 +1368,7 @@ export default class extends Controller {
     }
   }
 
-  getHelpController() {
-    const helpElement = document.querySelector('[data-controller~="help"]')
-    if (helpElement) {
-      return this.application.getControllerForElementAndIdentifier(helpElement, "help")
-    }
-    return null
-  }
-
-  // Code Snippet Editor - Delegates to code_dialog_controller
+  // === Code Snippet Editor - Delegates to code_dialog_controller ===
   openCodeEditor() {
     if (!this.hasTextareaTarget) return
 
@@ -1974,7 +1489,7 @@ export default class extends Controller {
     this.updatePreview()
   }
 
-  // AI Grammar Check Methods - Delegates to ai_grammar_controller
+  // === AI Grammar Check Methods - Delegates to ai_grammar_controller ===
 
   async openAiDialog() {
     if (!this.currentFile) {
@@ -2057,8 +1572,7 @@ export default class extends Controller {
     this.scheduleLineNumberUpdate()
   }
 
-  // File Operations Event Handlers
-  // These handle events dispatched by file_operations_controller
+  // === File Operations Event Handlers ===
 
   async onFileCreated(event) {
     const { path } = event.detail
@@ -2108,12 +1622,6 @@ export default class extends Controller {
     await this.refreshTree()
   }
 
-  // Helper to get file operations controller
-  getFileOperationsController() {
-    const element = document.querySelector('[data-controller~="file-operations"]')
-    return element ? this.application.getControllerForElementAndIdentifier(element, "file-operations") : null
-  }
-
   // File Operations - delegate to file-operations controller
   newNote() {
     const fileOps = this.getFileOperationsController()
@@ -2132,7 +1640,6 @@ export default class extends Controller {
 
   setupDialogClickOutside() {
     // Close dialog when clicking on backdrop (outside the dialog content)
-    // Note: Most dialogs are now extracted to separate controllers that handle their own click-outside
     if (this.hasHelpDialogTarget) {
       this.helpDialogTarget.addEventListener("click", (event) => {
         if (event.target === this.helpDialogTarget) {
@@ -2156,7 +1663,7 @@ export default class extends Controller {
     }
   }
 
-  // Keyboard Shortcuts
+  // === Keyboard Shortcuts ===
   setupKeyboardShortcuts() {
     this.boundKeydownHandler = (event) => {
       // Ctrl/Cmd + N: New note (delegate to file-operations controller)
@@ -2237,7 +1744,6 @@ export default class extends Controller {
       }
 
       // Escape: Close menus and dialogs managed by app_controller
-      // Note: Extracted controllers (file-finder, content-search, code-dialog, customize, file-operations, etc.) handle their own Escape key
       if (event.key === "Escape") {
         // Close context menu (delegated to file-operations controller via target)
         if (this.hasContextMenuTarget) {
@@ -2271,7 +1777,7 @@ export default class extends Controller {
     document.addEventListener("keydown", this.boundKeydownHandler)
   }
 
-  // Editor Indentation - delegates to lib/indent_utils.js
+  // === Editor Indentation ===
 
   // Get the current indent string
   getIndentString() {
@@ -2331,44 +1837,16 @@ export default class extends Controller {
     this.onTextareaInput()
   }
 
-  // Text Format Menu
-  // Get the text format controller instance
-  getTextFormatController() {
-    const textFormatElement = document.querySelector('[data-controller~="text-format"]')
-    if (textFormatElement) {
-      return this.application.getControllerForElementAndIdentifier(textFormatElement, "text-format")
-    }
-    return null
-  }
+  // === Text Format Menu ===
 
   // Open text format menu via Ctrl+M
   openTextFormatMenu() {
     if (!this.hasTextareaTarget) return
     if (!this.isMarkdownFile()) return
 
-    const textarea = this.textareaTarget
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-
-    // Only open if text is selected
-    if (start === end) return
-
-    const selectedText = textarea.value.substring(start, end)
-    if (!selectedText.trim()) return
-
-    const selectionData = {
-      start,
-      end,
-      text: selectedText
-    }
-
-    // Calculate position based on cursor/selection
-    // Use the caret position to place the menu
-    const { x, y } = this.getCaretCoordinates(textarea, end)
-
     const textFormatController = this.getTextFormatController()
     if (textFormatController) {
-      textFormatController.open(selectionData, x, y + 20) // Offset below cursor
+      textFormatController.openAtCursor(this.textareaTarget)
     }
   }
 
@@ -2390,63 +1868,10 @@ export default class extends Controller {
     // Prevent default context menu
     event.preventDefault()
 
-    const selectionData = {
-      start,
-      end,
-      text: selectedText
-    }
-
     const textFormatController = this.getTextFormatController()
     if (textFormatController) {
-      textFormatController.open(selectionData, event.clientX, event.clientY)
+      textFormatController.openAtPosition(this.textareaTarget, event.clientX, event.clientY)
     }
-  }
-
-  // Get approximate caret coordinates in the textarea
-  getCaretCoordinates(textarea, position) {
-    // Create a mirror div to measure text position
-    const mirror = document.createElement("div")
-    const style = window.getComputedStyle(textarea)
-
-    // Copy relevant styles
-    mirror.style.cssText = `
-      position: absolute;
-      top: -9999px;
-      left: -9999px;
-      width: ${textarea.clientWidth}px;
-      height: auto;
-      font-family: ${style.fontFamily};
-      font-size: ${style.fontSize};
-      font-weight: ${style.fontWeight};
-      line-height: ${style.lineHeight};
-      padding: ${style.padding};
-      border: ${style.border};
-      white-space: pre-wrap;
-      word-wrap: break-word;
-      overflow-wrap: break-word;
-    `
-
-    // Get text before position
-    const textBefore = textarea.value.substring(0, position)
-    mirror.textContent = textBefore
-
-    // Add a marker span at the position
-    const marker = document.createElement("span")
-    marker.textContent = "|"
-    mirror.appendChild(marker)
-
-    document.body.appendChild(mirror)
-
-    // Get textarea's position on screen
-    const textareaRect = textarea.getBoundingClientRect()
-
-    // Calculate position relative to viewport
-    const x = textareaRect.left + marker.offsetLeft - textarea.scrollLeft
-    const y = textareaRect.top + marker.offsetTop - textarea.scrollTop
-
-    document.body.removeChild(mirror)
-
-    return { x, y }
   }
 
   // Handle text format applied event
@@ -2498,46 +1923,13 @@ export default class extends Controller {
     const textFormatController = this.getTextFormatController()
     if (!textFormatController) return
 
-    const format = textFormatController.getFormat(formatId)
-    if (!format) return
-
-    const textarea = this.textareaTarget
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const text = textarea.value.substring(start, end)
-
-    // If no selection, just insert the format markers and place cursor between them
-    if (start === end) {
-      const { prefix, suffix } = format
-      const before = textarea.value.substring(0, start)
-      const after = textarea.value.substring(end)
-      textarea.value = before + prefix + suffix + after
-      // Position cursor between prefix and suffix
-      const cursorPos = start + prefix.length
-      textarea.setSelectionRange(cursorPos, cursorPos)
-    } else {
-      // Apply formatting to selected text
-      const selectionData = { start, end, text }
-      this.onTextFormatApplied({
-        detail: { prefix: format.prefix, suffix: format.suffix, selectionData }
-      })
-      return // onTextFormatApplied handles focus and save
+    if (textFormatController.applyFormatById(formatId, this.textareaTarget)) {
+      this.scheduleAutoSave()
+      this.updatePreview()
     }
-
-    textarea.focus()
-    this.scheduleAutoSave()
-    this.updatePreview()
   }
 
-  // Emoji Picker
-  // Get the emoji picker controller instance
-  getEmojiPickerController() {
-    const emojiPickerElement = document.querySelector('[data-controller~="emoji-picker"]')
-    if (emojiPickerElement) {
-      return this.application.getControllerForElementAndIdentifier(emojiPickerElement, "emoji-picker")
-    }
-    return null
-  }
+  // === Emoji Picker ===
 
   // Open emoji picker dialog
   openEmojiPicker() {
@@ -2576,7 +1968,8 @@ export default class extends Controller {
     this.updatePreview()
   }
 
-  // Utilities
+  // === Utilities ===
+
   // Get CSRF token safely
   get csrfToken() {
     const meta = document.querySelector('meta[name="csrf-token"]')
@@ -2624,15 +2017,13 @@ export default class extends Controller {
     dialog.showModal()
   }
 
-  // === Document Stats - delegates to stats-panel controller ===
-
-  getStatsPanelController() {
-    const statsPanelElement = document.querySelector('[data-controller~="stats-panel"]')
-    if (statsPanelElement) {
-      return this.application.getControllerForElementAndIdentifier(statsPanelElement, "stats-panel")
-    }
-    return null
+  // Clean up any object URLs created for local folder images
+  cleanupLocalFolderImages() {
+    // Implementation depends on image picker state
+    // This is called on disconnect to prevent memory leaks
   }
+
+  // === Document Stats - delegates to stats-panel controller ===
 
   showStatsPanel() {
     const statsController = this.getStatsPanelController()
@@ -2680,5 +2071,4 @@ export default class extends Controller {
 
     return { currentLine, totalLines }
   }
-
 }
