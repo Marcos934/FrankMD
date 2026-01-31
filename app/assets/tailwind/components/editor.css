@@ -4,6 +4,25 @@
  * Adapts to narrower windows when side-by-side with other apps
  */
 @layer components {
+  /*
+   * Responsive toolbar - labels hide when toolbar is narrow
+   * Uses container queries to respond to actual toolbar width
+   */
+  .editor-toolbar {
+    container-type: inline-size;
+  }
+
+  .toolbar-label {
+    display: none;
+  }
+
+  /* Show labels when toolbar is wide enough (> 550px) */
+  @container (min-width: 550px) {
+    .toolbar-label {
+      display: inline;
+    }
+  }
+
   .editor-textarea {
     /* Default: full width for narrow windows */
     max-width: 100%;
