@@ -279,7 +279,7 @@ ja:
     # Help dialog
     help:
       title: "ヘルプ"
-      toggle_hint: "F1またはCtrl+Hで切替"
+      toggle_hint: "F1で切替"
       tab_markdown: "マークダウン"
       tab_shortcuts: "キーボードショートカット"
       headings: "見出し"

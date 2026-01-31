@@ -276,7 +276,7 @@ he:
     # דיאלוג עזרה
     help:
       title: "עזרה"
-      toggle_hint: "לחץ F1 או Ctrl+H להחלפה"
+      toggle_hint: "לחץ F1 להחלפה"
       tab_markdown: "מרקדאון"
       tab_shortcuts: "קיצורי מקלדת"
       headings: "כותרות"

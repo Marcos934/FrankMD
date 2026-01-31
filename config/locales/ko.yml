@@ -279,7 +279,7 @@ ko:
     # 도움말 다이얼로그
     help:
       title: "도움말"
-      toggle_hint: "F1 또는 Ctrl+H로 전환"
+      toggle_hint: "F1로 전환"
       tab_markdown: "마크다운"
       tab_shortcuts: "키보드 단축키"
       headings: "제목"

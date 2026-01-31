@@ -279,7 +279,7 @@ pt-BR:
     # Diálogo de ajuda
     help:
       title: "Ajuda"
-      toggle_hint: "Pressione F1 ou Ctrl+H para alternar"
+      toggle_hint: "Pressione F1 para alternar"
       tab_markdown: "Markdown"
       tab_shortcuts: "Atalhos de Teclado"
       headings: "Títulos"

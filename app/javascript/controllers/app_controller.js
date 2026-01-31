@@ -72,8 +72,9 @@ export default class extends Controller {
     // Preview zoom (tracked for config saving, actual state in preview controller)
     this.previewZoom = parseInt(settings.preview_zoom) || 100
 
-    // Sidebar/Explorer visibility
-    this.sidebarVisible = settings.sidebar_visible !== false
+    // Sidebar/Explorer visibility - always start visible
+    // (don't persist closed state across sessions)
+    this.sidebarVisible = true
 
     // Typewriter mode - tracked for coordination (actual state in typewriter controller)
     this.typewriterModeEnabled = settings.typewriter_mode === true
@@ -1080,7 +1081,6 @@ export default class extends Controller {
   // === Sidebar/Explorer Toggle ===
   toggleSidebar() {
     this.sidebarVisible = !this.sidebarVisible
-    this.saveConfig({ sidebar_visible: this.sidebarVisible })
     this.applySidebarVisibility()
   }
 
@@ -1150,9 +1150,6 @@ export default class extends Controller {
         previewController.hide()
       }
     }
-
-    // Save sidebar visibility along with typewriter mode
-    this.saveConfig({ sidebar_visible: this.sidebarVisible })
   }
 
   maintainTypewriterScroll() {
@@ -1223,7 +1220,6 @@ export default class extends Controller {
     // Show sidebar if hidden
     if (!this.sidebarVisible) {
       this.sidebarVisible = true
-      this.saveConfig({ sidebar_visible: true })
       this.applySidebarVisibility()
     }
 

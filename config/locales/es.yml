@@ -279,7 +279,7 @@ es:
     # Help dialog
     help:
       title: "Ayuda"
-      toggle_hint: "Presiona F1 o Ctrl+H para alternar"
+      toggle_hint: "Presiona F1 para alternar"
       tab_markdown: "Markdown"
       tab_shortcuts: "Atajos de Teclado"
       headings: "Encabezados"

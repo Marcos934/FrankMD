@@ -279,7 +279,7 @@ en:
     # Help dialog
     help:
       title: "Help"
-      toggle_hint: "Press F1 or Ctrl+H to toggle"
+      toggle_hint: "Press F1 to toggle"
       tab_markdown: "Markdown"
       tab_shortcuts: "Keyboard Shortcuts"
       headings: "Headings"
