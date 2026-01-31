@@ -1,11 +1,13 @@
 import { Controller } from "@hotwired/stimulus"
 import { escapeHtml } from "lib/text_utils"
 import { EMOJI_DATA } from "lib/emoji_data"
+import { setEmojiLocale, getTranslatedEmojis, buildSearchIndex } from "lib/emoji_i18n"
 
 // Emoji Picker Controller
 // Handles emoji picker dialog with search and grid navigation
 // Supports both Unicode emojis and text emoticons (kaomoji)
 // Dispatches emoji-picker:selected event with emoji/emoticon text
+// Supports i18n search via emojibase translations
 
 // Emoticon/Kaomoji data: [name, emoticon, keywords for search]
 const EMOTICON_DATA = [
@@ -182,6 +184,29 @@ export default class extends Controller {
     this.filteredItems = [...this.allEmojis]
     this.selectedIndex = 0
     this.activeTab = "emoji" // "emoji" or "emoticons"
+    this.i18nSearchIndex = null // Map of emoji -> translated search terms
+    this.i18nLoaded = false
+
+    // Set locale from document
+    const locale = document.documentElement.lang || "en"
+    setEmojiLocale(locale)
+
+    // Preload i18n data in background
+    this.loadI18nData()
+  }
+
+  // Load translated emoji data for i18n search
+  async loadI18nData() {
+    if (this.i18nLoaded) return
+
+    try {
+      const data = await getTranslatedEmojis()
+      this.i18nSearchIndex = buildSearchIndex(data)
+      this.i18nLoaded = true
+    } catch (error) {
+      console.warn("Failed to load emoji i18n data:", error)
+      this.i18nSearchIndex = new Map()
+    }
   }
 
   // Open the emoji picker dialog
@@ -189,6 +214,11 @@ export default class extends Controller {
     this.activeTab = "emoji"
     this.filteredItems = [...this.allEmojis]
     this.selectedIndex = 0
+
+    // Ensure i18n data is loading (non-blocking)
+    if (!this.i18nLoaded) {
+      this.loadI18nData()
+    }
 
     this.inputTarget.value = ""
     this.updateTabStyles()
@@ -289,8 +319,11 @@ export default class extends Controller {
 
     if (!query) {
       this.filteredItems = [...sourceData]
+    } else if (this.activeTab === "emoji") {
+      // Search emojis with i18n support
+      this.filteredItems = this.searchEmojisWithI18n(query)
     } else {
-      // Search in name/shortcode and keywords
+      // Search emoticons (English only)
       this.filteredItems = sourceData.filter(([name, , keywords]) => {
         const searchText = `${name} ${keywords}`.toLowerCase()
         return query.split(/\s+/).every(term => searchText.includes(term))
@@ -300,6 +333,26 @@ export default class extends Controller {
     this.selectedIndex = 0
     this.renderGrid()
     this.updatePreview()
+  }
+
+  // Search emojis with both English and translated terms
+  searchEmojisWithI18n(query) {
+    const terms = query.split(/\s+/)
+
+    return this.allEmojis.filter(([shortcode, emoji, keywords]) => {
+      // Search in English shortcode and keywords
+      const englishText = `${shortcode} ${keywords}`.toLowerCase()
+      const matchesEnglish = terms.every(term => englishText.includes(term))
+      if (matchesEnglish) return true
+
+      // Search in translated terms if available
+      if (this.i18nSearchIndex && this.i18nSearchIndex.has(emoji)) {
+        const i18nData = this.i18nSearchIndex.get(emoji)
+        return terms.every(term => i18nData.searchTerms.includes(term))
+      }
+
+      return false
+    })
   }
 
   // Get current number of columns based on active tab
