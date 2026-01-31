@@ -12,6 +12,14 @@ import {
   buildRelativeLineLabels,
   buildAbsoluteLineLabels
 } from "lib/line_numbers"
+import { parseIndentSetting, indentLines, unindentLines } from "lib/indent_utils"
+import {
+  getLineBoundaries,
+  getCursorInfo as getTextCursorInfo,
+  getPositionForLine
+} from "lib/text_editor_utils"
+import { calculateScrollForLine, calculateLineFromScroll } from "lib/scroll_utils"
+import { calculateTypewriterScroll, getTypewriterSyncData } from "lib/typewriter_utils"
 
 export default class extends Controller {
   static targets = [
@@ -76,7 +84,7 @@ export default class extends Controller {
     this.typewriterModeEnabled = settings.typewriter_mode === true
 
     // Editor indent setting: 0 = tab, 1-6 = spaces (default 2)
-    this.editorIndent = this.parseIndentSetting(settings.editor_indent)
+    this.editorIndent = parseIndentSetting(settings.editor_indent)
 
     this.lineNumberMode = normalizeLineNumberMode(
       settings.editor_line_numbers,
@@ -658,15 +666,13 @@ export default class extends Controller {
     const content = textarea.value
     const totalLines = content.split("\n").length
 
-    // Calculate which line is at the center of visible area
-    const scrollTop = textarea.scrollTop
-    const clientHeight = textarea.clientHeight
-    const scrollHeight = textarea.scrollHeight
-
-    // Estimate line height and calculate center line
-    const lineHeight = scrollHeight / totalLines
-    const centerY = scrollTop + (clientHeight / 2)
-    const centerLine = Math.max(1, Math.min(totalLines, Math.round(centerY / lineHeight)))
+    // Calculate which line is at the center of visible area using utility function
+    const centerLine = calculateLineFromScroll(
+      textarea.scrollTop,
+      textarea.clientHeight,
+      textarea.scrollHeight,
+      totalLines
+    )
 
     previewController.syncToTypewriter(centerLine, totalLines)
   }
@@ -797,7 +803,7 @@ export default class extends Controller {
       this.currentFont = settings.editor_font || "cascadia-code"
       this.currentFontSize = parseInt(settings.editor_font_size) || 14
       this.previewZoom = parseInt(settings.preview_zoom) || 100
-      this.editorIndent = this.parseIndentSetting(settings.editor_indent)
+      this.editorIndent = parseIndentSetting(settings.editor_indent)
       this.lineNumberMode = normalizeLineNumberMode(
         settings.editor_line_numbers,
         LINE_NUMBER_MODES.OFF
@@ -1581,21 +1587,18 @@ export default class extends Controller {
     // Use mirror div technique to get accurate cursor position
     const cursorY = this.getCursorYPosition(textarea, cursorPos)
 
-    // Target position: 50% from top of visible area (center)
-    const targetY = textarea.clientHeight * 0.5
-
-    // Calculate desired scroll position to put cursor at target
-    const desiredScrollTop = cursorY - targetY
+    // Calculate desired scroll position using utility function
+    const desiredScrollTop = calculateTypewriterScroll(cursorY, textarea.clientHeight)
 
     // Use setTimeout to ensure we run after all browser scroll behavior
     setTimeout(() => {
-      textarea.scrollTop = Math.max(0, desiredScrollTop)
+      textarea.scrollTop = desiredScrollTop
 
-      // Also sync preview if visible
+      // Also sync preview if visible using utility function
       const previewController = this.getPreviewController()
       if (previewController && previewController.isVisible) {
-        const linesBefore = text.substring(0, cursorPos).split("\n").length
-        this.syncPreviewToTypewriter(linesBefore, text.split("\n").length)
+        const { currentLine, totalLines } = getTypewriterSyncData(text, cursorPos)
+        this.syncPreviewToTypewriter(currentLine, totalLines)
       }
     }, 0)
   }
@@ -1803,40 +1806,35 @@ export default class extends Controller {
     if (!this.hasTextareaTarget) return
 
     const textarea = this.textareaTarget
-    const lines = textarea.value.split("\n")
 
-    // Calculate character position of the line
-    let charPos = 0
-    for (let i = 0; i < lineNumber - 1 && i < lines.length; i++) {
-      charPos += lines[i].length + 1 // +1 for newline
-    }
+    // Use utility function to calculate character position
+    const charPos = getPositionForLine(textarea.value, lineNumber)
 
     // Set cursor position
     textarea.focus()
     textarea.setSelectionRange(charPos, charPos)
 
-    // Scroll to make the line visible
+    // Scroll to make the line visible using utility function
     const style = window.getComputedStyle(textarea)
     const fontSize = parseFloat(style.fontSize) || 14
     const lineHeight = parseFloat(style.lineHeight) || fontSize * 1.6
-    const targetScroll = (lineNumber - 1) * lineHeight - textarea.clientHeight * 0.35
+    const targetScroll = calculateScrollForLine(lineNumber, lineHeight, textarea.clientHeight)
 
-    textarea.scrollTop = Math.max(0, targetScroll)
+    textarea.scrollTop = targetScroll
   }
 
   scrollTextareaToPosition(position) {
     if (!this.hasTextareaTarget) return
 
     const textarea = this.textareaTarget
-    const textBeforeCursor = textarea.value.substring(0, position)
-    const lineNumber = textBeforeCursor.split("\n").length
+    const { line: lineNumber } = getTextCursorInfo(textarea.value, position)
 
     const style = window.getComputedStyle(textarea)
     const fontSize = parseFloat(style.fontSize) || 14
     const lineHeight = parseFloat(style.lineHeight) || fontSize * 1.6
-    const targetScroll = (lineNumber - 1) * lineHeight - textarea.clientHeight * 0.35
+    const targetScroll = calculateScrollForLine(lineNumber, lineHeight, textarea.clientHeight)
 
-    textarea.scrollTop = Math.max(0, targetScroll)
+    textarea.scrollTop = targetScroll
   }
 
   // Help Dialog - delegates to help controller
@@ -2273,23 +2271,7 @@ export default class extends Controller {
     document.addEventListener("keydown", this.boundKeydownHandler)
   }
 
-  // Editor Indentation
-  // Parse indent setting: 0 = tab, 1-6 = spaces (default 2)
-  parseIndentSetting(value) {
-    if (value === undefined || value === null || value === "") {
-      return "  " // Default: 2 spaces
-    }
-    const num = parseInt(value, 10)
-    if (isNaN(num) || num < 0) {
-      return "  " // Default: 2 spaces
-    }
-    if (num === 0) {
-      return "\t" // Tab character
-    }
-    // Clamp to 1-6 spaces
-    const spaces = Math.min(Math.max(num, 1), 6)
-    return " ".repeat(spaces)
-  }
+  // Editor Indentation - delegates to lib/indent_utils.js
 
   // Get the current indent string
   getIndentString() {
@@ -2324,64 +2306,27 @@ export default class extends Controller {
       return
     }
 
-    // There's a selection - indent/unindent block
+    // There's a selection - indent/unindent block using utility functions
     event.preventDefault()
 
-    // Find the start and end of the affected lines
-    const lineStartPos = text.lastIndexOf("\n", start - 1) + 1
-    const lineEndPos = text.indexOf("\n", end - 1)
-    const actualLineEnd = lineEndPos === -1 ? text.length : lineEndPos
-
-    // Get the selected lines
-    const selectedText = text.substring(lineStartPos, actualLineEnd)
-    const lines = selectedText.split("\n")
-
+    const { lineStart, lineEnd, lines } = getLineBoundaries(text, start, end)
+    const selectedText = lines.join("\n")
     const indent = this.getIndentString()
-    let modifiedLines
 
-    if (event.shiftKey) {
-      // Unindent: remove one level of indentation from each line
-      modifiedLines = lines.map(line => {
-        // Try to remove the exact indent string first
-        if (line.startsWith(indent)) {
-          return line.substring(indent.length)
-        }
-        // If indent is spaces, try removing up to that many leading spaces
-        if (indent !== "\t") {
-          const indentLength = indent.length
-          let removeCount = 0
-          for (let i = 0; i < Math.min(indentLength, line.length); i++) {
-            if (line[i] === " ") {
-              removeCount++
-            } else {
-              break
-            }
-          }
-          if (removeCount > 0) {
-            return line.substring(removeCount)
-          }
-        }
-        // Try removing a single tab if present
-        if (line.startsWith("\t")) {
-          return line.substring(1)
-        }
-        return line
-      })
-    } else {
-      // Indent: add indentation to the beginning of each line
-      modifiedLines = lines.map(line => indent + line)
-    }
+    // Use imported indentLines/unindentLines from lib/indent_utils.js
+    const modifiedText = event.shiftKey
+      ? unindentLines(selectedText, indent)
+      : indentLines(selectedText, indent)
 
-    const modifiedText = modifiedLines.join("\n")
-    const before = text.substring(0, lineStartPos)
-    const after = text.substring(actualLineEnd)
+    const before = text.substring(0, lineStart)
+    const after = text.substring(lineEnd)
 
     textarea.value = before + modifiedText + after
 
     // Adjust selection to cover the modified lines
     const lengthDiff = modifiedText.length - selectedText.length
-    textarea.selectionStart = lineStartPos
-    textarea.selectionEnd = actualLineEnd + lengthDiff
+    textarea.selectionStart = lineStart
+    textarea.selectionEnd = lineEnd + lengthDiff
 
     this.onTextareaInput()
   }
