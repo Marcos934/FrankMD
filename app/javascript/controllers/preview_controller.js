@@ -65,6 +65,8 @@ export default class extends Controller {
     this._lastSyncedLine = null
     this._lastSyncedTotalLines = null
     this._previewRenderTimeout = null
+    this._scrollSource = null // Track who initiated the scroll: 'editor' or 'preview'
+    this._scrollSourceTimeout = null
     this.applyZoom()
   }
 
@@ -75,7 +77,65 @@ export default class extends Controller {
     if (this._previewRenderTimeout) {
       clearTimeout(this._previewRenderTimeout)
     }
+    if (this._scrollSourceTimeout) {
+      clearTimeout(this._scrollSourceTimeout)
+    }
     this.editorTextarea = null
+  }
+
+  // Mark that scroll was initiated by editor (prevents reverse sync)
+  _markScrollFromEditor() {
+    this._scrollSource = "editor"
+    if (this._scrollSourceTimeout) {
+      clearTimeout(this._scrollSourceTimeout)
+    }
+    // Clear the flag after a short delay to allow new scrolls
+    this._scrollSourceTimeout = setTimeout(() => {
+      this._scrollSource = null
+    }, 100)
+  }
+
+  // Mark that scroll was initiated by preview (prevents reverse sync)
+  _markScrollFromPreview() {
+    this._scrollSource = "preview"
+    if (this._scrollSourceTimeout) {
+      clearTimeout(this._scrollSourceTimeout)
+    }
+    this._scrollSourceTimeout = setTimeout(() => {
+      this._scrollSource = null
+    }, 100)
+  }
+
+  // Handle scroll event on preview content - sync to editor
+  onPreviewScroll() {
+    if (!this.syncScrollEnabledValue) return
+    if (!this.isVisible) return
+    if (!this.editorTextarea) return
+
+    // Don't sync back if this scroll was caused by editor sync
+    if (this._scrollSource === "editor") return
+
+    // Mark that preview initiated this scroll
+    this._markScrollFromPreview()
+
+    // Dispatch event to notify app controller to sync editor
+    this.dispatch("scroll", {
+      detail: {
+        scrollRatio: this._getPreviewScrollRatio(),
+        typewriterMode: this.typewriterModeValue
+      }
+    })
+  }
+
+  // Get current scroll ratio of preview
+  _getPreviewScrollRatio() {
+    if (!this.hasContentTarget) return 0
+
+    const preview = this.contentTarget
+    const scrollHeight = preview.scrollHeight - preview.clientHeight
+
+    if (scrollHeight <= 0) return 0
+    return preview.scrollTop / scrollHeight
   }
 
   // Toggle preview panel visibility
@@ -152,6 +212,12 @@ export default class extends Controller {
     if (!this.isVisible) return
     if (!this.hasContentTarget) return
     if (totalLines <= 1) return
+
+    // Don't sync if this was triggered by preview scroll
+    if (this._scrollSource === "preview") return
+
+    // Mark that editor initiated this scroll
+    this._markScrollFromEditor()
 
     // Wait for DOM to fully settle after render
     if (this.syncScrollTimeout) {
@@ -247,6 +313,12 @@ export default class extends Controller {
     if (!this.isVisible) return
     if (!this.hasContentTarget) return
 
+    // Don't sync if this was triggered by preview scroll
+    if (this._scrollSource === "preview") return
+
+    // Mark that editor initiated this scroll
+    this._markScrollFromEditor()
+
     // Debounce to avoid excessive updates
     if (this.syncScrollTimeout) {
       cancelAnimationFrame(this.syncScrollTimeout)
@@ -269,6 +341,12 @@ export default class extends Controller {
     if (!this.hasContentTarget) return
     if (totalLines <= 1) return
 
+    // Don't sync if this was triggered by preview scroll
+    if (this._scrollSource === "preview") return
+
+    // Mark that editor initiated this scroll
+    this._markScrollFromEditor()
+
     const lineRatio = (linesBefore - 1) / (totalLines - 1)
     const preview = this.contentTarget
     const previewScrollHeight = preview.scrollHeight - preview.clientHeight
@@ -287,6 +365,12 @@ export default class extends Controller {
   syncToTypewriter(currentLine, totalLines) {
     if (!this.hasContentTarget) return
     if (totalLines <= 1) return
+
+    // Don't sync if this was triggered by preview scroll
+    if (this._scrollSource === "preview") return
+
+    // Mark that editor initiated this scroll
+    this._markScrollFromEditor()
 
     // Wait for DOM to fully settle after render
     if (this.syncScrollTimeout) {

@@ -376,4 +376,124 @@ describe("PreviewController", () => {
       expect(controller.contentTarget.classList.contains("preview-typewriter-mode")).toBe(false)
     })
   })
+
+  describe("bidirectional scroll sync", () => {
+    beforeEach(() => {
+      controller.show()
+      // Setup editor textarea reference
+      const textarea = document.createElement("textarea")
+      textarea.value = "line1\nline2\nline3\nline4\nline5"
+      document.body.appendChild(textarea)
+      controller.editorTextarea = textarea
+    })
+
+    describe("_markScrollFromEditor()", () => {
+      it("sets scroll source to editor", () => {
+        controller._markScrollFromEditor()
+        expect(controller._scrollSource).toBe("editor")
+      })
+
+      it("clears scroll source after timeout", async () => {
+        controller._markScrollFromEditor()
+        expect(controller._scrollSource).toBe("editor")
+
+        await new Promise(resolve => setTimeout(resolve, 150))
+        expect(controller._scrollSource).toBe(null)
+      })
+    })
+
+    describe("_markScrollFromPreview()", () => {
+      it("sets scroll source to preview", () => {
+        controller._markScrollFromPreview()
+        expect(controller._scrollSource).toBe("preview")
+      })
+
+      it("clears scroll source after timeout", async () => {
+        controller._markScrollFromPreview()
+        expect(controller._scrollSource).toBe("preview")
+
+        await new Promise(resolve => setTimeout(resolve, 150))
+        expect(controller._scrollSource).toBe(null)
+      })
+    })
+
+    describe("onPreviewScroll()", () => {
+      it("dispatches scroll event with scroll ratio", () => {
+        const dispatchSpy = vi.spyOn(controller, "dispatch")
+
+        // Mock scroll position
+        Object.defineProperty(controller.contentTarget, "scrollTop", { value: 50, configurable: true })
+        Object.defineProperty(controller.contentTarget, "scrollHeight", { value: 200, configurable: true })
+        Object.defineProperty(controller.contentTarget, "clientHeight", { value: 100, configurable: true })
+
+        controller.onPreviewScroll()
+
+        expect(dispatchSpy).toHaveBeenCalledWith("scroll", {
+          detail: {
+            scrollRatio: 0.5,
+            typewriterMode: false
+          }
+        })
+      })
+
+      it("does not dispatch when scroll sync is disabled", () => {
+        controller.syncScrollEnabledValue = false
+        const dispatchSpy = vi.spyOn(controller, "dispatch")
+
+        controller.onPreviewScroll()
+
+        expect(dispatchSpy).not.toHaveBeenCalled()
+      })
+
+      it("does not dispatch when scroll was initiated by editor", () => {
+        controller._markScrollFromEditor()
+        const dispatchSpy = vi.spyOn(controller, "dispatch")
+
+        controller.onPreviewScroll()
+
+        expect(dispatchSpy).not.toHaveBeenCalled()
+      })
+    })
+
+    describe("syncScrollRatio() prevents reverse sync", () => {
+      it("does not sync when scroll source is preview", () => {
+        controller._markScrollFromPreview()
+        const scrollToSpy = vi.spyOn(controller.contentTarget, "scrollTo")
+
+        controller.syncScrollRatio(0.5)
+
+        expect(scrollToSpy).not.toHaveBeenCalled()
+      })
+
+      it("syncs when scroll source is null", () => {
+        controller._scrollSource = null
+
+        // Need to use RAF mock
+        vi.spyOn(window, "requestAnimationFrame").mockImplementation(cb => { cb(); return 1 })
+
+        controller.syncScrollRatio(0.5)
+
+        // Should have called scrollTo via RAF
+        expect(controller._scrollSource).toBe("editor")
+      })
+    })
+
+    describe("_getPreviewScrollRatio()", () => {
+      it("returns correct scroll ratio", () => {
+        Object.defineProperty(controller.contentTarget, "scrollTop", { value: 50, configurable: true })
+        Object.defineProperty(controller.contentTarget, "scrollHeight", { value: 200, configurable: true })
+        Object.defineProperty(controller.contentTarget, "clientHeight", { value: 100, configurable: true })
+
+        expect(controller._getPreviewScrollRatio()).toBe(0.5)
+      })
+
+      it("returns 0 when content is not scrollable", () => {
+        Object.defineProperty(controller.contentTarget, "scrollTop", { value: 0, configurable: true })
+        Object.defineProperty(controller.contentTarget, "scrollHeight", { value: 100, configurable: true })
+        Object.defineProperty(controller.contentTarget, "clientHeight", { value: 100, configurable: true })
+
+        expect(controller._getPreviewScrollRatio()).toBe(0)
+      })
+    })
+  })
 })

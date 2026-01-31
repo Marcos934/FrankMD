@@ -1584,6 +1584,25 @@ export default class extends Controller {
     this.scheduleLineNumberUpdate()
   }
 
+  // Handle preview scroll event - sync editor to preview position
+  onPreviewScroll(event) {
+    if (!this.hasTextareaTarget) return
+
+    const { scrollRatio } = event.detail
+    const textarea = this.textareaTarget
+
+    // Calculate target scroll position for editor
+    const scrollHeight = textarea.scrollHeight - textarea.clientHeight
+    if (scrollHeight <= 0) return
+
+    const targetScroll = scrollRatio * scrollHeight
+
+    // Only scroll if change is significant (prevent jitter)
+    if (Math.abs(textarea.scrollTop - targetScroll) > 5) {
+      textarea.scrollTop = targetScroll
+    }
+  }
+
   // === File Operations Event Handlers ===
 
   async onFileCreated(event) {
