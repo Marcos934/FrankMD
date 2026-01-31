@@ -1,5 +1,11 @@
 import { Controller } from "@hotwired/stimulus"
 import { marked } from "marked"
+import { escapeHtml, fuzzyScore, levenshteinDistance } from "lib/text_utils"
+import { findTableAtPosition, findCodeBlockAtPosition, generateHugoBlogPost, slugify } from "lib/markdown_utils"
+import { encodePath, extractYouTubeId } from "lib/url_utils"
+import { calculateStats, formatFileSize, formatReadTime } from "lib/stats_utils"
+import { computeWordDiff } from "lib/diff_utils"
+import { flattenTree } from "lib/tree_utils"
 
 export default class extends Controller {
   static targets = [
@@ -24,68 +30,6 @@ export default class extends Controller {
     "editorToolbar",
     "helpDialog",
     "tableHint",
-    "imageBtn",
-    "imageDialog",
-    "imageSearch",
-    "imageGrid",
-    "imageOptions",
-    "selectedImageName",
-    "imageAlt",
-    "imageLink",
-    "s3Option",
-    "uploadToS3",
-    "imageLoading",
-    "imageLoadingText",
-    "insertImageBtn",
-    "imageTabLocal",
-    "imageTabWeb",
-    "imageTabGoogle",
-    "imageTabPinterest",
-    "imageLocalPanel",
-    "imageWebPanel",
-    "imageGooglePanel",
-    "imagePinterestPanel",
-    "webImageSearch",
-    "webSearchBtn",
-    "webImageStatus",
-    "webImageGrid",
-    "googleImageSearch",
-    "googleSearchBtn",
-    "googleImageStatus",
-    "googleImageGrid",
-    "pinterestImageSearch",
-    "pinterestSearchBtn",
-    "pinterestImageStatus",
-    "pinterestImageGrid",
-    "imageTabAi",
-    "imageAiPanel",
-    "aiImageConfigNotice",
-    "aiImageForm",
-    "aiImageModel",
-    "aiImagePrompt",
-    "aiImageGenerateBtn",
-    "aiImageProcessing",
-    "aiImageProcessingModel",
-    "aiImageResult",
-    "aiImagePreview",
-    "aiImageRevisedPromptContainer",
-    "aiImageRevisedPrompt",
-    "aiImageSaveLocal",
-    "aiImageSaveS3",
-    "aiImageS3OptionContainer",
-    "aiRefImageSection",
-    "aiRefImagePreviewContainer",
-    "aiRefImagePreview",
-    "aiRefImageName",
-    "aiRefImagePicker",
-    "aiRefImageSearch",
-    "aiRefImageGrid",
-    "s3ExternalOption",
-    "reuploadToS3",
-    "resizeOptionLocal",
-    "resizeSelectLocal",
-    "resizeOptionExternal",
-    "resizeSelectExternal",
     "codeDialog",
     "codeLanguage",
     "codeContent",
@@ -122,22 +66,6 @@ export default class extends Controller {
     "youtubeSearchResults",
     "youtubeConfigNotice",
     "youtubeSearchForm",
-    "localImagesForm",
-    "localImagesConfigNotice",
-    "googleImagesConfigNotice",
-    "googleImagesForm",
-    "imageTabFolder",
-    "imageFolderPanel",
-    "folderApiNotice",
-    "browsePrompt",
-    "localFolderContainer",
-    "localFolderStatus",
-    "localFolderGrid",
-    "folderImageSearch",
-    "s3FolderOption",
-    "uploadFolderToS3",
-    "resizeOptionFolder",
-    "resizeSelectFolder",
     "aiButton",
     "aiDiffDialog",
     "aiConfigNotice",
@@ -175,31 +103,6 @@ export default class extends Controller {
     // Context menu click position (for positioning dialogs near click)
     this.contextClickX = 0
     this.contextClickY = 0
-
-    // Image picker state
-    this.imagesEnabled = false
-    this.s3Enabled = false
-    this.webSearchEnabled = false
-    this.googleImagesEnabled = false
-    this.pinterestEnabled = false
-    this.aiImageEnabled = false
-    this.aiImageModel = null
-    this.generatedImageData = null
-    this.aiImageAbortController = null
-    this.aiRefImage = null  // Selected reference image for AI generation
-    this.aiRefImageSearchTimeout = null
-    this.selectedImage = null
-    this.imageSearchTimeout = null
-    this.currentImageTab = "local"
-    this.webImageResults = []
-    this.googleImageResults = []
-    this.googleImageNextStart = 0
-    this.googleImageLoading = false
-    this.googleImageQuery = ""
-    this.pinterestImageResults = []
-    this.localFolderImages = []  // Currently displayed images from browser folder picker
-    this.allFolderImages = []    // All images metadata from folder (for filtering)
-    this.folderSearchTimeout = null
 
     // Code snippet state
     this.codeEditMode = false
@@ -279,7 +182,6 @@ export default class extends Controller {
     this.setupContextMenuClose()
     this.setupDialogClickOutside()
     this.setupSyncScroll()
-    this.loadImagesConfig()
     this.applyEditorSettings()
     this.applyPreviewZoom()
     this.applySidebarVisibility()
@@ -303,9 +205,6 @@ export default class extends Controller {
   disconnect() {
     // Clear all timeouts
     if (this.saveTimeout) clearTimeout(this.saveTimeout)
-    if (this.imageSearchTimeout) clearTimeout(this.imageSearchTimeout)
-    if (this.folderSearchTimeout) clearTimeout(this.folderSearchTimeout)
-    if (this.aiRefImageSearchTimeout) clearTimeout(this.aiRefImageSearchTimeout)
     if (this.configSaveTimeout) clearTimeout(this.configSaveTimeout)
     if (this.contentSearchTimeout) clearTimeout(this.contentSearchTimeout)
     if (this.statsUpdateTimeout) clearTimeout(this.statsUpdateTimeout)
@@ -387,7 +286,7 @@ export default class extends Controller {
 
   updateUrl(path, options = {}) {
     const { replace = false } = options
-    const newUrl = path ? `/notes/${this.encodePath(path)}` : "/"
+    const newUrl = path ? `/notes/${encodePath(path)}` : "/"
 
     if (window.location.pathname !== newUrl) {
       if (replace) {
@@ -439,8 +338,8 @@ export default class extends Controller {
     this.textareaTarget.disabled = true
 
     this.currentPathTarget.innerHTML = `
-      <span class="text-red-500">${this.escapeHtml(path)}</span>
-      <span class="text-[var(--theme-text-muted)] ml-2">(${this.escapeHtml(message)})</span>
+      <span class="text-red-500">${escapeHtml(path)}</span>
+      <span class="text-[var(--theme-text-muted)] ml-2">(${escapeHtml(message)})</span>
     `
 
     // Clear after a moment and return to normal state
@@ -470,17 +369,17 @@ export default class extends Controller {
       if (item.type === "folder") {
         const isExpanded = this.expandedFolders.has(item.path)
         return `
-          <div class="tree-folder" data-path="${this.escapeHtml(item.path)}">
+          <div class="tree-folder" data-path="${escapeHtml(item.path)}">
             <div class="tree-item drop-target" draggable="true"
               data-action="click->app#toggleFolder contextmenu->app#showContextMenu dragstart->app#onDragStart dragover->app#onDragOver dragenter->app#onDragEnter dragleave->app#onDragLeave drop->app#onDrop dragend->app#onDragEnd"
-              data-path="${this.escapeHtml(item.path)}" data-type="folder">
+              data-path="${escapeHtml(item.path)}" data-type="folder">
               <svg class="tree-chevron ${isExpanded ? 'expanded' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
               </svg>
               <svg class="tree-icon text-[var(--theme-folder-icon)]" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
               </svg>
-              <span class="truncate">${this.escapeHtml(item.name)}</span>
+              <span class="truncate">${escapeHtml(item.name)}</span>
             </div>
             <div class="tree-children ${isExpanded ? '' : 'hidden'}">
               ${this.buildTreeHTML(item.children, depth + 1)}
@@ -503,9 +402,9 @@ export default class extends Controller {
         const clickAction = isConfig ? 'data-action="click->app#selectFile"' : ''
         return `
           <div class="tree-item ${isSelected ? 'selected' : ''}" ${isConfig ? clickAction : dragAttrs}
-            data-path="${this.escapeHtml(item.path)}" data-type="file" data-file-type="${item.file_type || 'markdown'}">
+            data-path="${escapeHtml(item.path)}" data-type="file" data-file-type="${item.file_type || 'markdown'}">
             ${icon}
-            <span class="truncate">${this.escapeHtml(item.name)}</span>
+            <span class="truncate">${escapeHtml(item.name)}</span>
           </div>
         `
       }
@@ -666,7 +565,7 @@ export default class extends Controller {
   async moveItem(oldPath, newPath, type) {
     try {
       const endpoint = type === "file" ? "notes" : "folders"
-      const response = await fetch(`/${endpoint}/${this.encodePath(oldPath)}/rename`, {
+      const response = await fetch(`/${endpoint}/${encodePath(oldPath)}/rename`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -713,7 +612,7 @@ export default class extends Controller {
     const { updateHistory = true } = options
 
     try {
-      const response = await fetch(`/notes/${this.encodePath(path)}`, {
+      const response = await fetch(`/notes/${encodePath(path)}`, {
         headers: { "Accept": "application/json" }
       })
 
@@ -814,74 +713,12 @@ export default class extends Controller {
 
     const text = this.textareaTarget.value
     const cursorPos = this.textareaTarget.selectionStart
-    const tableInfo = this.findTableAtPosition(text, cursorPos)
+    const tableInfo = findTableAtPosition(text, cursorPos)
 
     if (tableInfo) {
       this.tableHintTarget.classList.remove("hidden")
     } else {
       this.tableHintTarget.classList.add("hidden")
-    }
-  }
-
-  // Find markdown table at given position
-  findTableAtPosition(text, pos) {
-    const lines = text.split("\n")
-    let lineStart = 0
-    let currentLine = 0
-
-    // Find which line the cursor is on
-    for (let i = 0; i < lines.length; i++) {
-      const lineEnd = lineStart + lines[i].length
-      if (pos >= lineStart && pos <= lineEnd) {
-        currentLine = i
-        break
-      }
-      lineStart = lineEnd + 1 // +1 for newline
-    }
-
-    // Check if current line looks like a table row
-    const line = lines[currentLine]
-    if (!line || !line.trim().startsWith("|")) {
-      return null
-    }
-
-    // Find table boundaries (search up and down for table rows)
-    let startLine = currentLine
-    let endLine = currentLine
-
-    // Search upward
-    while (startLine > 0 && lines[startLine - 1].trim().startsWith("|")) {
-      startLine--
-    }
-
-    // Search downward
-    while (endLine < lines.length - 1 && lines[endLine + 1].trim().startsWith("|")) {
-      endLine++
-    }
-
-    // Need at least 2 lines (header + separator)
-    if (endLine - startLine < 1) {
-      return null
-    }
-
-    // Calculate positions
-    let startPos = 0
-    for (let i = 0; i < startLine; i++) {
-      startPos += lines[i].length + 1
-    }
-
-    let endPos = startPos
-    for (let i = startLine; i <= endLine; i++) {
-      endPos += lines[i].length + 1
-    }
-    endPos-- // Remove trailing newline
-
-    return {
-      startLine,
-      endLine,
-      startPos,
-      endPos,
-      lines: lines.slice(startLine, endLine + 1)
     }
   }
 
@@ -905,7 +742,7 @@ export default class extends Controller {
     const isConfigFile = this.currentFile === ".fed"
 
     try {
-      const response = await fetch(`/notes/${this.encodePath(this.currentFile)}`, {
+      const response = await fetch(`/notes/${encodePath(this.currentFile)}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -1131,7 +968,7 @@ export default class extends Controller {
     if (this.hasTextareaTarget) {
       const text = this.textareaTarget.value
       const cursorPos = this.textareaTarget.selectionStart
-      const tableInfo = this.findTableAtPosition(text, cursorPos)
+      const tableInfo = findTableAtPosition(text, cursorPos)
 
       if (tableInfo) {
         existingTable = tableInfo.lines.join("\n")
@@ -1192,1326 +1029,48 @@ export default class extends Controller {
     this.updatePreview()
   }
 
-  // Image Picker
-  async loadImagesConfig() {
-    try {
-      const response = await fetch("/images/config", {
-        headers: { "Accept": "application/json" }
-      })
-      if (response.ok) {
-        const config = await response.json()
-        this.imagesEnabled = config.enabled
-        this.s3Enabled = config.s3_enabled
-        this.webSearchEnabled = config.web_search_enabled
-        this.googleImagesEnabled = config.google_enabled
-        this.pinterestEnabled = config.pinterest_enabled
-      }
-      // Always show image button - web search and Pinterest are always available
-      if (this.hasImageBtnTarget) {
-        this.imageBtnTarget.classList.remove("hidden")
-      }
-    } catch (error) {
-      console.error("Error loading images config:", error)
-      // Still show the button even on error - web search and Pinterest work without config
-      if (this.hasImageBtnTarget) {
-        this.imageBtnTarget.classList.remove("hidden")
-      }
-    }
+  // Image Picker Event Handler - receives events from image_picker_controller
+  onImageSelected(event) {
+    const { markdown } = event.detail
+    if (!markdown || !this.hasTextareaTarget) return
 
-    // Also load AI image generation config
-    try {
-      const aiResponse = await fetch("/ai/image_config", {
-        headers: { "Accept": "application/json" }
-      })
-      if (aiResponse.ok) {
-        const aiConfig = await aiResponse.json()
-        this.aiImageEnabled = aiConfig.enabled
-        this.aiImageModel = aiConfig.model
-      }
-    } catch (error) {
-      console.error("Error loading AI image config:", error)
-    }
-  }
-
-  async openImagePicker() {
-    this.selectedImage = null
-    this.currentImageTab = "local"
-
-    // Reset local tab
-    if (this.hasImageSearchTarget) this.imageSearchTarget.value = ""
-    this.imageAltTarget.value = ""
-    this.imageLinkTarget.value = ""
-    this.imageOptionsTarget.classList.add("hidden")
-    this.insertImageBtnTarget.disabled = true
-
-    // Reset Web Search tab
-    if (this.hasWebImageSearchTarget) this.webImageSearchTarget.value = ""
-    if (this.hasWebImageGridTarget) this.webImageGridTarget.innerHTML = ""
-    if (this.hasWebImageStatusTarget) {
-      this.webImageStatusTarget.textContent = "Enter keywords and click Search or press Enter"
-    }
-    this.webImageResults = []
-
-    // Reset Google tab
-    if (this.hasGoogleImageSearchTarget) this.googleImageSearchTarget.value = ""
-    if (this.hasGoogleImageGridTarget) this.googleImageGridTarget.innerHTML = ""
-    if (this.hasGoogleImageStatusTarget) {
-      this.googleImageStatusTarget.textContent = "Enter keywords and click Search or press Enter"
-    }
-    this.googleImageResults = []
-    this.googleImageNextStart = 0
-    this.googleImageQuery = ""
-
-    // Reset Pinterest tab
-    if (this.hasPinterestImageSearchTarget) this.pinterestImageSearchTarget.value = ""
-    if (this.hasPinterestImageGridTarget) this.pinterestImageGridTarget.innerHTML = ""
-    if (this.hasPinterestImageStatusTarget) {
-      this.pinterestImageStatusTarget.textContent = "Enter keywords and click Search or press Enter"
-    }
-    this.pinterestImageResults = []
-
-    // Reset AI Image Generation tab
-    if (this.hasAiImagePromptTarget) this.aiImagePromptTarget.value = ""
-    if (this.hasAiImageProcessingTarget) this.aiImageProcessingTarget.classList.add("hidden")
-    if (this.hasAiImageResultTarget) this.aiImageResultTarget.classList.add("hidden")
-    if (this.hasAiImageGenerateBtnTarget) this.aiImageGenerateBtnTarget.disabled = false
-    if (this.hasAiImageSaveLocalTarget) this.aiImageSaveLocalTarget.checked = true
-    this.generatedImageData = null
-    // Reset reference image
-    this.aiRefImage = null
-    if (this.hasAiRefImageSearchTarget) this.aiRefImageSearchTarget.value = ""
-    if (this.hasAiRefImagePreviewContainerTarget) this.aiRefImagePreviewContainerTarget.classList.add("hidden")
-    if (this.hasAiRefImagePickerTarget) this.aiRefImagePickerTarget.classList.remove("hidden")
-    if (this.hasAiRefImageGridTarget) this.aiRefImageGridTarget.innerHTML = ""
-    // Abort any pending AI image generation
-    if (this.aiImageAbortController) {
-      this.aiImageAbortController.abort()
-      this.aiImageAbortController = null
-    }
-
-    // Hide all S3 options initially
-    if (this.hasS3OptionTarget) this.s3OptionTarget.classList.add("hidden")
-    if (this.hasS3ExternalOptionTarget) this.s3ExternalOptionTarget.classList.add("hidden")
-    if (this.hasS3FolderOptionTarget) this.s3FolderOptionTarget.classList.add("hidden")
-    if (this.hasUploadToS3Target) this.uploadToS3Target.checked = false
-    if (this.hasReuploadToS3Target) this.reuploadToS3Target.checked = false
-    if (this.hasUploadFolderToS3Target) this.uploadFolderToS3Target.checked = false
-
-    // Setup local folder picker UI
-    this.setupLocalFolderPickerUI()
-
-    // Show/hide Google config notice
-    if (this.hasGoogleImagesConfigNoticeTarget && this.hasGoogleImagesFormTarget) {
-      this.googleImagesConfigNoticeTarget.classList.toggle("hidden", this.googleImagesEnabled)
-      this.googleImagesFormTarget.classList.toggle("hidden", !this.googleImagesEnabled)
-    }
-
-    // Show/hide AI image generation config notice
-    if (this.hasAiImageConfigNoticeTarget && this.hasAiImageFormTarget) {
-      this.aiImageConfigNoticeTarget.classList.toggle("hidden", this.aiImageEnabled)
-      this.aiImageFormTarget.classList.toggle("hidden", !this.aiImageEnabled)
-    }
-    // Show/hide S3 option for AI images
-    if (this.hasAiImageS3OptionContainerTarget) {
-      this.aiImageS3OptionContainerTarget.classList.toggle("hidden", !this.s3Enabled)
-    }
-    // Update model display
-    if (this.hasAiImageModelTarget && this.aiImageModel) {
-      this.aiImageModelTarget.textContent = this.aiImageModel
-    }
-    // Show/hide reference image section based on whether images are enabled
-    if (this.hasAiRefImageSectionTarget) {
-      this.aiRefImageSectionTarget.classList.toggle("hidden", !this.imagesEnabled)
-    }
-
-    // Set initial tab - always show local first (folder picker always available)
-    let initialTab = "local"
-
-    // Switch to initial tab
-    this.switchImageTab({ currentTarget: { dataset: { tab: initialTab } } })
-
-    // Load local images if server images enabled
-    if (this.imagesEnabled) {
-      await this.loadImages()
-    }
-
-    this.imageDialogTarget.showModal()
-  }
-
-  // Check if File System Access API is available
-  get fileSystemAccessSupported() {
-    return "showDirectoryPicker" in window
-  }
-
-  // Setup the local folder picker UI based on browser support and server config
-  setupLocalFolderPickerUI() {
-    const hasApi = this.fileSystemAccessSupported
-    const hasServerImages = this.imagesEnabled
-    const hasFolderImages = this.localFolderImages.length > 0
-
-    // Show/hide local images config notice
-    if (this.hasLocalImagesConfigNoticeTarget && this.hasLocalImagesFormTarget) {
-      this.localImagesConfigNoticeTarget.classList.toggle("hidden", hasServerImages)
-      this.localImagesFormTarget.classList.toggle("hidden", !hasServerImages)
-    }
-
-    // In folder panel: show API notice, browse prompt, or folder container
-    if (this.hasFolderApiNoticeTarget) {
-      this.folderApiNoticeTarget.classList.toggle("hidden", hasApi)
-    }
-    if (this.hasBrowsePromptTarget) {
-      // Show browse prompt only if API available and no folder images loaded
-      this.browsePromptTarget.classList.toggle("hidden", !hasApi || hasFolderImages)
-    }
-    if (this.hasLocalFolderContainerTarget) {
-      this.localFolderContainerTarget.classList.toggle("hidden", !hasFolderImages)
-    }
-  }
-
-  closeImageDialog() {
-    // Clean up object URLs from folder picker to free memory
-    this.cleanupLocalFolderImages()
-    this.imageDialogTarget.close()
-  }
-
-  async loadImages(search = "") {
-    try {
-      const url = search ? `/images?search=${encodeURIComponent(search)}` : "/images"
-      const response = await fetch(url, {
-        headers: { "Accept": "application/json" }
-      })
-
-      if (!response.ok) {
-        throw new Error("Failed to load images")
-      }
-
-      const images = await response.json()
-      this.renderImageGrid(images)
-    } catch (error) {
-      console.error("Error loading images:", error)
-      this.imageGridTarget.innerHTML = '<div class="image-grid-empty">Error loading images</div>'
-    }
-  }
-
-  renderImageGrid(images) {
-    if (!images || images.length === 0) {
-      this.imageGridTarget.innerHTML = '<div class="image-grid-empty">No images found</div>'
-      return
-    }
-
-    const html = images.map(image => {
-      const dimensions = (image.width && image.height) ? `${image.width}x${image.height}` : ""
-      return `
-        <div
-          class="image-grid-item ${this.selectedImage?.path === image.path ? 'selected' : ''}"
-          data-action="click->app#selectImage"
-          data-path="${this.escapeHtml(image.path)}"
-          data-name="${this.escapeHtml(image.name)}"
-          title="${this.escapeHtml(image.name)}${dimensions ? ` (${dimensions})` : ''}"
-        >
-          <img src="/images/preview/${this.encodePath(image.path)}" alt="${this.escapeHtml(image.name)}" loading="lazy">
-          ${dimensions ? `<div class="image-dimensions">${dimensions}</div>` : ''}
-        </div>
-      `
-    }).join("")
-
-    this.imageGridTarget.innerHTML = html
-  }
-
-  onImageSearch() {
-    // Debounce search
-    if (this.imageSearchTimeout) {
-      clearTimeout(this.imageSearchTimeout)
-    }
-
-    this.imageSearchTimeout = setTimeout(() => {
-      this.loadImages(this.imageSearchTarget.value.trim())
-    }, 300)
-  }
-
-  // Open browser folder picker
-  async browseLocalFolder() {
-    if (!this.fileSystemAccessSupported) {
-      return
-    }
-
-    try {
-      const dirHandle = await window.showDirectoryPicker()
-      await this.loadImagesFromDirectory(dirHandle)
-    } catch (err) {
-      if (err.name !== "AbortError") {
-        console.error("Error accessing folder:", err)
-      }
-    }
-  }
-
-  // Read images from directory handle
-  async loadImagesFromDirectory(dirHandle) {
-    // Revoke previous object URLs to free memory
-    this.cleanupLocalFolderImages()
-
-    this.allFolderImages = []
-    const imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"]
-
-    try {
-      // Collect all image files
-      for await (const entry of dirHandle.values()) {
-        if (entry.kind === "file") {
-          const name = entry.name.toLowerCase()
-          if (imageExtensions.some(ext => name.endsWith(ext))) {
-            const file = await entry.getFile()
-            this.allFolderImages.push({
-              name: entry.name,
-              file: file,
-              lastModified: file.lastModified,
-              size: file.size
-            })
-          }
-        }
-      }
-
-      // Sort by most recent first
-      this.allFolderImages.sort((a, b) => b.lastModified - a.lastModified)
-
-      // Clear search and display
-      if (this.hasFolderImageSearchTarget) {
-        this.folderImageSearchTarget.value = ""
-      }
-      await this.filterAndDisplayFolderImages("")
-
-      this.setupLocalFolderPickerUI()
-    } catch (err) {
-      console.error("Error reading folder:", err)
-    }
-  }
-
-  // Filter and display folder images based on search term
-  async filterAndDisplayFolderImages(searchTerm) {
-    const maxImages = 10
-    const term = searchTerm.toLowerCase().trim()
-
-    // Filter images by name
-    let filtered = this.allFolderImages
-    if (term) {
-      filtered = this.allFolderImages.filter(img =>
-        img.name.toLowerCase().includes(term)
-      )
-    }
-
-    // Revoke previous object URLs
-    for (const img of this.localFolderImages) {
-      if (img.objectUrl) {
-        URL.revokeObjectURL(img.objectUrl)
-      }
-    }
-
-    // Take top N and create object URLs with dimensions
-    const topImages = filtered.slice(0, maxImages)
-    this.localFolderImages = await Promise.all(topImages.map(async (img) => {
-      const objectUrl = URL.createObjectURL(img.file)
-      const dimensions = await this.getImageDimensions(objectUrl)
-      return {
-        name: img.name,
-        file: img.file,
-        objectUrl: objectUrl,
-        size: img.size,
-        lastModified: img.lastModified,
-        width: dimensions.width,
-        height: dimensions.height
-      }
-    }))
-
-    this.renderLocalFolderImages(filtered.length)
-  }
-
-  // Handle folder image search input
-  onFolderImageSearch() {
-    if (this.folderSearchTimeout) {
-      clearTimeout(this.folderSearchTimeout)
-    }
-
-    this.folderSearchTimeout = setTimeout(() => {
-      const searchTerm = this.folderImageSearchTarget.value
-      this.filterAndDisplayFolderImages(searchTerm)
-    }, 300)
-  }
-
-  // Get image dimensions by loading into an Image element
-  getImageDimensions(url) {
-    return new Promise((resolve) => {
-      const img = new Image()
-      img.onload = () => {
-        resolve({ width: img.naturalWidth, height: img.naturalHeight })
-      }
-      img.onerror = () => {
-        resolve({ width: null, height: null })
-      }
-      img.src = url
-    })
-  }
-
-  // Render images from local folder in grid
-  renderLocalFolderImages(totalCount = null) {
-    if (!this.hasLocalFolderGridTarget) return
-
-    if (this.localFolderImages.length === 0) {
-      this.localFolderGridTarget.innerHTML = '<div class="col-span-5 text-center text-[var(--theme-text-muted)] py-8">No images found in folder</div>'
-      if (this.hasLocalFolderStatusTarget) {
-        this.localFolderStatusTarget.textContent = "No images found"
-      }
-      return
-    }
-
-    // Update status with count info
-    if (this.hasLocalFolderStatusTarget) {
-      const shown = this.localFolderImages.length
-      if (totalCount && totalCount > shown) {
-        this.localFolderStatusTarget.textContent = `Showing ${shown} most recent of ${totalCount} images`
-      } else {
-        this.localFolderStatusTarget.textContent = `${shown} image${shown !== 1 ? "s" : ""} found`
-      }
-    }
-
-    const html = this.localFolderImages.map((image, index) => {
-      const sizeKb = Math.round(image.size / 1024)
-      const dimensions = (image.width && image.height) ? `${image.width}x${image.height}` : ""
-      return `
-        <div
-          class="image-grid-item"
-          data-action="click->app#selectLocalFolderImage"
-          data-index="${index}"
-          title="${this.escapeHtml(image.name)}${dimensions ? ` (${dimensions})` : ''} - ${sizeKb} KB"
-        >
-          <img src="${image.objectUrl}" alt="${this.escapeHtml(image.name)}" loading="lazy">
-          ${dimensions ? `<div class="image-dimensions">${dimensions}</div>` : ''}
-        </div>
-      `
-    }).join("")
-
-    this.localFolderGridTarget.innerHTML = html
-  }
-
-  // Select an image from local folder
-  selectLocalFolderImage(event) {
-    const index = parseInt(event.currentTarget.dataset.index)
-    const image = this.localFolderImages[index]
-
-    if (!image) return
-
-    // Deselect previous in all grids
-    this.deselectAllImages()
-
-    // Select new
-    event.currentTarget.classList.add("selected")
-    this.selectedImage = {
-      name: image.name,
-      file: image.file,
-      objectUrl: image.objectUrl,
-      type: "local-folder"
-    }
-
-    // Show options
-    this.imageOptionsTarget.classList.remove("hidden")
-    this.selectedImageNameTarget.textContent = image.name
-    this.insertImageBtnTarget.disabled = false
-
-    // Show S3 folder option (always show resize for folder uploads)
-    if (this.hasS3OptionTarget) this.s3OptionTarget.classList.add("hidden")
-    if (this.hasS3ExternalOptionTarget) this.s3ExternalOptionTarget.classList.add("hidden")
-    if (this.hasS3FolderOptionTarget) {
-      this.s3FolderOptionTarget.classList.remove("hidden")
-    }
-
-    // Pre-fill alt text with filename (without extension)
-    const altText = image.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ")
-    this.imageAltTarget.value = altText
-  }
-
-  // Helper to deselect all images across all grids
-  deselectAllImages() {
-    if (this.hasImageGridTarget) {
-      this.imageGridTarget.querySelectorAll(".image-grid-item").forEach(el => {
-        el.classList.remove("selected")
-      })
-    }
-    if (this.hasLocalFolderGridTarget) {
-      this.localFolderGridTarget.querySelectorAll(".image-grid-item").forEach(el => {
-        el.classList.remove("selected")
-      })
-    }
-    if (this.hasGoogleImageGridTarget) {
-      this.googleImageGridTarget.querySelectorAll(".external-image-item").forEach(el => {
-        el.classList.remove("ring-2", "ring-blue-500")
-      })
-    }
-    if (this.hasPinterestImageGridTarget) {
-      this.pinterestImageGridTarget.querySelectorAll(".external-image-item").forEach(el => {
-        el.classList.remove("ring-2", "ring-blue-500")
-      })
-    }
-    if (this.hasWebImageGridTarget) {
-      this.webImageGridTarget.querySelectorAll(".external-image-item").forEach(el => {
-        el.classList.remove("ring-2", "ring-blue-500")
-      })
-    }
-  }
-
-  // Cleanup object URLs when dialog closes
-  cleanupLocalFolderImages() {
-    for (const image of this.localFolderImages) {
-      if (image.objectUrl) {
-        URL.revokeObjectURL(image.objectUrl)
-      }
-    }
-    this.localFolderImages = []
-    this.allFolderImages = []
-  }
-
-  // Upload file from local folder to server
-  async uploadLocalFolderImage(file, resize, uploadToS3) {
-    const formData = new FormData()
-    formData.append("file", file)
-    if (resize) formData.append("resize", resize)
-    if (uploadToS3) formData.append("upload_to_s3", "true")
-
-    const response = await fetch("/images/upload", {
-      method: "POST",
-      headers: {
-        "X-CSRF-Token": this.csrfToken
-      },
-      body: formData
-    })
-
-    if (!response.ok) {
-      const data = await response.json()
-      throw new Error(data.error || "Upload failed")
-    }
-
-    return await response.json()
-  }
-
-  // Handle S3 folder checkbox change (no-op, resize always shown)
-  onS3FolderCheckboxChange() {
-    // Resize is always shown for folder uploads, nothing to toggle
-  }
-
-  selectImage(event) {
-    const item = event.currentTarget
-    const path = item.dataset.path
-    const name = item.dataset.name
-
-    // Deselect all images
-    this.deselectAllImages()
-
-    // Select new
-    item.classList.add("selected")
-    this.selectedImage = { path, name, type: "local" }
-
-    // Show options
-    this.imageOptionsTarget.classList.remove("hidden")
-    this.selectedImageNameTarget.textContent = name
-    this.insertImageBtnTarget.disabled = false
-
-    // Show S3 option for local server images, hide others
-    if (this.s3Enabled && this.hasS3OptionTarget) {
-      this.s3OptionTarget.classList.remove("hidden")
-    }
-    if (this.hasS3ExternalOptionTarget) {
-      this.s3ExternalOptionTarget.classList.add("hidden")
-    }
-    if (this.hasS3FolderOptionTarget) {
-      this.s3FolderOptionTarget.classList.add("hidden")
-    }
-
-    // Pre-fill alt text with filename (without extension)
-    const altText = name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ")
-    this.imageAltTarget.value = altText
-  }
-
-  selectExternalImage(event) {
-    const item = event.currentTarget
-    const url = item.dataset.url
-    const thumbnail = item.dataset.thumbnail
-    const title = item.dataset.title || "Image"
-    const source = item.dataset.source || "external"
-
-    // Deselect all images
-    this.deselectAllImages()
-
-    // Select new
-    item.classList.add("ring-2", "ring-blue-500")
-    this.selectedImage = { url, thumbnail, title, source, type: "external" }
-
-    // Show options
-    this.imageOptionsTarget.classList.remove("hidden")
-    this.selectedImageNameTarget.textContent = title
-    this.insertImageBtnTarget.disabled = false
-
-    // Hide local S3 options, show external S3 option
-    if (this.hasS3OptionTarget) {
-      this.s3OptionTarget.classList.add("hidden")
-    }
-    if (this.hasS3FolderOptionTarget) {
-      this.s3FolderOptionTarget.classList.add("hidden")
-    }
-    if (this.s3Enabled && this.hasS3ExternalOptionTarget) {
-      this.s3ExternalOptionTarget.classList.remove("hidden")
-    }
-
-    // Pre-fill alt text with title
-    const altText = title.replace(/[-_]/g, " ").substring(0, 100)
-    this.imageAltTarget.value = altText
-  }
-
-  switchImageTab(event) {
-    const tab = event.currentTarget.dataset.tab
-    this.currentImageTab = tab
-
-    const activeClasses = "border-[var(--theme-accent)] text-[var(--theme-accent)]"
-    const inactiveClasses = "border-transparent text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]"
-
-    // Update tab button styles
-    if (this.hasImageTabLocalTarget) {
-      this.imageTabLocalTarget.className = `px-4 py-2 text-sm font-medium border-b-2 ${tab === "local" ? activeClasses : inactiveClasses}`
-    }
-    if (this.hasImageTabFolderTarget) {
-      this.imageTabFolderTarget.className = `px-4 py-2 text-sm font-medium border-b-2 ${tab === "folder" ? activeClasses : inactiveClasses}`
-    }
-    if (this.hasImageTabWebTarget) {
-      this.imageTabWebTarget.className = `px-4 py-2 text-sm font-medium border-b-2 ${tab === "web" ? activeClasses : inactiveClasses}`
-    }
-    if (this.hasImageTabGoogleTarget) {
-      this.imageTabGoogleTarget.className = `px-4 py-2 text-sm font-medium border-b-2 ${tab === "google" ? activeClasses : inactiveClasses}`
-    }
-    if (this.hasImageTabPinterestTarget) {
-      this.imageTabPinterestTarget.className = `px-4 py-2 text-sm font-medium border-b-2 ${tab === "pinterest" ? activeClasses : inactiveClasses}`
-    }
-    if (this.hasImageTabAiTarget) {
-      this.imageTabAiTarget.className = `px-4 py-2 text-sm font-medium border-b-2 ${tab === "ai" ? activeClasses : inactiveClasses}`
-    }
-
-    // Show/hide panels
-    if (this.hasImageLocalPanelTarget) {
-      this.imageLocalPanelTarget.classList.toggle("hidden", tab !== "local")
-    }
-    if (this.hasImageFolderPanelTarget) {
-      this.imageFolderPanelTarget.classList.toggle("hidden", tab !== "folder")
-    }
-    if (this.hasImageWebPanelTarget) {
-      this.imageWebPanelTarget.classList.toggle("hidden", tab !== "web")
-    }
-    if (this.hasImageGooglePanelTarget) {
-      this.imageGooglePanelTarget.classList.toggle("hidden", tab !== "google")
-    }
-    if (this.hasImagePinterestPanelTarget) {
-      this.imagePinterestPanelTarget.classList.toggle("hidden", tab !== "pinterest")
-    }
-    if (this.hasImageAiPanelTarget) {
-      this.imageAiPanelTarget.classList.toggle("hidden", tab !== "ai")
-    }
-
-    // Focus appropriate input (only if the feature is configured)
-    if (tab === "local" && this.hasImageSearchTarget && this.imagesEnabled) {
-      this.imageSearchTarget.focus()
-    } else if (tab === "web" && this.hasWebImageSearchTarget) {
-      this.webImageSearchTarget.focus()
-    } else if (tab === "google" && this.hasGoogleImageSearchTarget && this.googleImagesEnabled) {
-      this.googleImageSearchTarget.focus()
-    } else if (tab === "pinterest" && this.hasPinterestImageSearchTarget) {
-      this.pinterestImageSearchTarget.focus()
-    } else if (tab === "ai" && this.hasAiImagePromptTarget && this.aiImageEnabled) {
-      this.aiImagePromptTarget.focus()
-      // Load reference images if images are enabled and grid is empty
-      if (this.imagesEnabled && this.hasAiRefImageGridTarget && !this.aiRefImageGridTarget.innerHTML.trim()) {
-        this.loadAiRefImages()
-      }
-    }
-  }
-
-  // Web Search (DuckDuckGo/Bing)
-  onWebImageSearchKeydown(event) {
-    if (event.key === "Enter") {
-      event.preventDefault()
-      this.searchWebImages()
-    }
-  }
-
-  async searchWebImages() {
-    const query = this.webImageSearchTarget.value.trim()
-
-    if (!query) {
-      this.webImageStatusTarget.textContent = "Please enter search keywords"
-      return
-    }
-
-    this.webImageStatusTarget.textContent = "Searching..."
-    if (this.hasWebSearchBtnTarget) this.webSearchBtnTarget.disabled = true
-    this.webImageGridTarget.innerHTML = ""
-
-    try {
-      const response = await fetch(`/images/search_web?q=${encodeURIComponent(query)}`)
-      const data = await response.json()
-
-      if (data.error) {
-        this.webImageStatusTarget.innerHTML = `<span class="text-red-500">${data.error}</span>`
-        this.webImageResults = []
-      } else {
-        this.webImageResults = data.images || []
-
-        if (this.webImageResults.length === 0) {
-          this.webImageStatusTarget.textContent = data.note || "No images found"
-        } else {
-          this.webImageStatusTarget.textContent = `Found ${this.webImageResults.length} images - click to select`
-        }
-
-        this.renderExternalImageGrid(this.webImageResults, this.webImageGridTarget)
-      }
-    } catch (error) {
-      console.error("Web search error:", error)
-      this.webImageStatusTarget.innerHTML = '<span class="text-red-500">Search failed. Please try again.</span>'
-      this.webImageResults = []
-    } finally {
-      if (this.hasWebSearchBtnTarget) this.webSearchBtnTarget.disabled = false
-    }
-  }
-
-  // Google Images (Custom Search API)
-  onGoogleImageSearchKeydown(event) {
-    if (event.key === "Enter") {
-      event.preventDefault()
-      this.searchGoogleImages()
-    }
-  }
-
-  async searchGoogleImages() {
-    const query = this.googleImageSearchTarget.value.trim()
-
-    if (!query) {
-      this.googleImageStatusTarget.textContent = "Please enter search keywords"
-      return
-    }
-
-    // Reset for new search
-    this.googleImageResults = []
-    this.googleImageNextStart = 1
-    this.googleImageQuery = query
-    this.googleImageGridTarget.innerHTML = ""
-
-    await this.loadMoreGoogleImages()
-  }
-
-  async loadMoreGoogleImages() {
-    if (this.googleImageLoading) return
-
-    this.googleImageLoading = true
-    this.googleImageStatusTarget.textContent = "Searching..."
-    if (this.hasGoogleSearchBtnTarget) this.googleSearchBtnTarget.disabled = true
-
-    try {
-      const response = await fetch(`/images/search_google?q=${encodeURIComponent(this.googleImageQuery)}&start=${this.googleImageNextStart}`)
-      const data = await response.json()
-
-      if (data.error) {
-        this.googleImageStatusTarget.innerHTML = `<span class="text-red-500">${data.error}</span>`
-      } else {
-        this.googleImageResults = [...this.googleImageResults, ...data.images]
-        this.googleImageNextStart = data.next_start
-
-        if (this.googleImageResults.length === 0) {
-          this.googleImageStatusTarget.textContent = "No images found"
-        } else {
-          this.googleImageStatusTarget.textContent = `Found ${data.total || this.googleImageResults.length} images - click to select`
-        }
-
-        this.renderExternalImageGrid(this.googleImageResults, this.googleImageGridTarget)
-      }
-    } catch (error) {
-      console.error("Google search error:", error)
-      this.googleImageStatusTarget.innerHTML = '<span class="text-red-500">Search failed. Please try again.</span>'
-    } finally {
-      this.googleImageLoading = false
-      if (this.hasGoogleSearchBtnTarget) this.googleSearchBtnTarget.disabled = false
-    }
-  }
-
-  onGoogleImageScroll(event) {
-    const container = event.target
-    const scrollBottom = container.scrollHeight - container.scrollTop - container.clientHeight
-
-    // Load more when near bottom
-    if (scrollBottom < 100 && !this.googleImageLoading && this.googleImageResults.length > 0) {
-      this.loadMoreGoogleImages()
-    }
-  }
-
-  onPinterestImageSearchKeydown(event) {
-    if (event.key === "Enter") {
-      event.preventDefault()
-      this.searchPinterestImages()
-    }
-  }
-
-  async searchPinterestImages() {
-    const query = this.pinterestImageSearchTarget.value.trim()
-
-    if (!query) {
-      this.pinterestImageStatusTarget.textContent = "Please enter search keywords"
-      return
-    }
-
-    this.pinterestImageStatusTarget.textContent = "Searching..."
-    if (this.hasPinterestSearchBtnTarget) this.pinterestSearchBtnTarget.disabled = true
-    this.pinterestImageGridTarget.innerHTML = ""
-
-    try {
-      const response = await fetch(`/images/search_pinterest?q=${encodeURIComponent(query)}`)
-      const data = await response.json()
-
-      if (data.error) {
-        this.pinterestImageStatusTarget.innerHTML = `<span class="text-red-500">${data.error}</span>`
-        this.pinterestImageResults = []
-      } else {
-        this.pinterestImageResults = data.images || []
-
-        if (this.pinterestImageResults.length === 0) {
-          this.pinterestImageStatusTarget.textContent = "No images found"
-        } else {
-          this.pinterestImageStatusTarget.textContent = `Found ${this.pinterestImageResults.length} images - click to select`
-        }
-
-        this.renderExternalImageGrid(this.pinterestImageResults, this.pinterestImageGridTarget)
-      }
-    } catch (error) {
-      console.error("Pinterest search error:", error)
-      this.pinterestImageStatusTarget.innerHTML = '<span class="text-red-500">Search failed. Please try again.</span>'
-      this.pinterestImageResults = []
-    } finally {
-      if (this.hasPinterestSearchBtnTarget) this.pinterestSearchBtnTarget.disabled = false
-    }
-  }
-
-  // AI Image Generation
-  onAiImagePromptKeydown(event) {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault()
-      this.generateAiImage()
-    }
-  }
-
-  async generateAiImage() {
-    const prompt = this.aiImagePromptTarget.value.trim()
-
-    if (!prompt) {
-      alert("Please enter a prompt describing the image you want to generate")
-      return
-    }
-
-    if (!this.aiImageEnabled) {
-      alert("AI image generation is not configured. Please add your Gemini API key to .fed")
-      return
-    }
-
-    // Create abort controller for cancellation
-    this.aiImageAbortController = new AbortController()
-
-    // Show processing state
-    if (this.hasAiImageProcessingTarget) {
-      this.aiImageProcessingTarget.classList.remove("hidden")
-    }
-    if (this.hasAiImageProcessingModelTarget) {
-      this.aiImageProcessingModelTarget.textContent = this.aiImageModel || "imagen-4.0-generate-001"
-    }
-    if (this.hasAiImageGenerateBtnTarget) {
-      this.aiImageGenerateBtnTarget.disabled = true
-    }
-    if (this.hasAiImageResultTarget) {
-      this.aiImageResultTarget.classList.add("hidden")
-    }
-
-    // Add ESC key listener for cancellation
-    const escHandler = (e) => {
-      if (e.key === "Escape") {
-        this.aiImageAbortController?.abort()
-      }
-    }
-    document.addEventListener("keydown", escHandler)
-
-    try {
-      // Build request body with optional reference image
-      const requestBody = { prompt }
-      if (this.aiRefImage?.path) {
-        requestBody.reference_image_path = this.aiRefImage.path
-      }
-
-      const response = await fetch("/ai/generate_image", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": this.csrfToken
-        },
-        body: JSON.stringify(requestBody),
-        signal: this.aiImageAbortController.signal
-      })
-
-      const data = await response.json()
-
-      if (data.error) {
-        alert(`AI Error: ${data.error}`)
-        return
-      }
-
-      // Store generated image data
-      this.generatedImageData = {
-        data: data.data,
-        url: data.url,
-        mime_type: data.mime_type,
-        model: data.model,
-        revised_prompt: data.revised_prompt
-      }
-
-      // Show result
-      if (this.hasAiImagePreviewTarget) {
-        if (data.data) {
-          // Base64 image
-          this.aiImagePreviewTarget.src = `data:${data.mime_type || 'image/png'};base64,${data.data}`
-        } else if (data.url) {
-          // URL image
-          this.aiImagePreviewTarget.src = data.url
-        }
-      }
-
-      // Show revised prompt if available
-      if (this.hasAiImageRevisedPromptContainerTarget && this.hasAiImageRevisedPromptTarget) {
-        if (data.revised_prompt) {
-          this.aiImageRevisedPromptTarget.textContent = data.revised_prompt
-          this.aiImageRevisedPromptContainerTarget.classList.remove("hidden")
-        } else {
-          this.aiImageRevisedPromptContainerTarget.classList.add("hidden")
-        }
-      }
-
-      // Show result panel
-      if (this.hasAiImageResultTarget) {
-        this.aiImageResultTarget.classList.remove("hidden")
-      }
-
-      // Enable the insert button - we now have an image selected
-      this.selectedImage = {
-        type: "ai-generated",
-        name: `ai_${Date.now()}.png`,
-        title: prompt.substring(0, 50)
-      }
-      this.imageOptionsTarget.classList.remove("hidden")
-      this.selectedImageNameTarget.textContent = "AI Generated Image"
-      this.insertImageBtnTarget.disabled = false
-
-      // Hide S3 options for other tabs, we use the AI-specific save options
-      if (this.hasS3OptionTarget) this.s3OptionTarget.classList.add("hidden")
-      if (this.hasS3ExternalOptionTarget) this.s3ExternalOptionTarget.classList.add("hidden")
-      if (this.hasS3FolderOptionTarget) this.s3FolderOptionTarget.classList.add("hidden")
-
-      // Pre-fill alt text with the prompt (truncated)
-      const altText = prompt.length > 100 ? prompt.substring(0, 100) + "..." : prompt
-      this.imageAltTarget.value = altText
-
-    } catch (error) {
-      if (error.name === "AbortError") {
-        console.log("AI image generation cancelled by user")
-      } else {
-        console.error("AI image generation error:", error)
-        alert("Failed to generate image. Please try again.")
-      }
-    } finally {
-      document.removeEventListener("keydown", escHandler)
-      this.aiImageAbortController = null
-
-      // Hide processing state
-      if (this.hasAiImageProcessingTarget) {
-        this.aiImageProcessingTarget.classList.add("hidden")
-      }
-      if (this.hasAiImageGenerateBtnTarget) {
-        this.aiImageGenerateBtnTarget.disabled = false
-      }
-    }
-  }
-
-  // AI Reference Image Methods
-  async loadAiRefImages(search = "") {
-    if (!this.imagesEnabled || !this.hasAiRefImageGridTarget) return
-
-    try {
-      const url = search ? `/images?search=${encodeURIComponent(search)}` : "/images"
-      const response = await fetch(url, {
-        headers: { "Accept": "application/json" }
-      })
-
-      if (!response.ok) {
-        throw new Error("Failed to load images")
-      }
-
-      const images = await response.json()
-      this.renderAiRefImageGrid(images)
-    } catch (error) {
-      console.error("Error loading reference images:", error)
-      this.aiRefImageGridTarget.innerHTML = '<div class="col-span-6 text-center text-[var(--theme-text-muted)] py-4 text-xs">Error loading images</div>'
-    }
-  }
-
-  renderAiRefImageGrid(images) {
-    if (!images || images.length === 0) {
-      this.aiRefImageGridTarget.innerHTML = '<div class="col-span-6 text-center text-[var(--theme-text-muted)] py-4 text-xs">No images found</div>'
-      return
-    }
-
-    const html = images.map(image => `
-      <button
-        type="button"
-        class="aspect-square rounded overflow-hidden bg-[var(--theme-bg-tertiary)] hover:ring-2 hover:ring-[var(--theme-accent)] transition-all focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)] ${this.aiRefImage?.path === image.path ? 'ring-2 ring-[var(--theme-accent)]' : ''}"
-        data-action="click->app#selectAiRefImage"
-        data-path="${this.escapeHtml(image.path)}"
-        data-name="${this.escapeHtml(image.name)}"
-        title="${this.escapeHtml(image.name)}"
-      >
-        <img src="/images/preview/${this.encodePath(image.path)}" alt="${this.escapeHtml(image.name)}" class="w-full h-full object-cover" loading="lazy">
-      </button>
-    `).join("")
-
-    this.aiRefImageGridTarget.innerHTML = html
-  }
-
-  onAiRefImageSearch() {
-    // Debounce search
-    if (this.aiRefImageSearchTimeout) {
-      clearTimeout(this.aiRefImageSearchTimeout)
-    }
-
-    this.aiRefImageSearchTimeout = setTimeout(() => {
-      const search = this.aiRefImageSearchTarget.value.trim()
-      this.loadAiRefImages(search)
-    }, 300)
-  }
-
-  selectAiRefImage(event) {
-    const button = event.currentTarget
-    const path = button.dataset.path
-    const name = button.dataset.name
-
-    // Store selected reference image
-    this.aiRefImage = { path, name }
-
-    // Update UI - show preview and hide picker
-    if (this.hasAiRefImagePreviewTarget) {
-      this.aiRefImagePreviewTarget.src = `/images/preview/${this.encodePath(path)}`
-    }
-    if (this.hasAiRefImageNameTarget) {
-      this.aiRefImageNameTarget.textContent = name
-    }
-    if (this.hasAiRefImagePreviewContainerTarget) {
-      this.aiRefImagePreviewContainerTarget.classList.remove("hidden")
-    }
-    if (this.hasAiRefImagePickerTarget) {
-      this.aiRefImagePickerTarget.classList.add("hidden")
-    }
-  }
-
-  clearAiRefImage() {
-    this.aiRefImage = null
-
-    // Update UI - hide preview and show picker
-    if (this.hasAiRefImagePreviewContainerTarget) {
-      this.aiRefImagePreviewContainerTarget.classList.add("hidden")
-    }
-    if (this.hasAiRefImagePickerTarget) {
-      this.aiRefImagePickerTarget.classList.remove("hidden")
-    }
-    if (this.hasAiRefImageSearchTarget) {
-      this.aiRefImageSearchTarget.value = ""
-    }
-    // Reload images
-    this.loadAiRefImages()
-  }
-
-  renderExternalImageGrid(images, container) {
-    if (!images || images.length === 0) {
-      container.innerHTML = '<div class="col-span-4 text-center text-[var(--theme-text-muted)] py-8">No images found</div>'
-      return
-    }
-
-    container.innerHTML = images.map((image, index) => {
-      const dimensions = (image.width && image.height) ? `${image.width}x${image.height}` : ""
-      return `
-        <button
-          type="button"
-          data-index="${index}"
-          data-url="${this.escapeHtml(image.url)}"
-          data-thumbnail="${this.escapeHtml(image.thumbnail || image.url)}"
-          data-title="${this.escapeHtml(image.title || '')}"
-          data-source="${this.escapeHtml(image.source || '')}"
-          data-action="click->app#selectExternalImage"
-          class="external-image-item relative aspect-square rounded-lg overflow-hidden bg-[var(--theme-bg-tertiary)] hover:ring-2 hover:ring-[var(--theme-accent)] transition-all focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)]"
-          title="${this.escapeHtml(image.title || 'Image')}${dimensions ? ` (${dimensions})` : ''}"
-        >
-          <img
-            src="${this.escapeHtml(image.thumbnail || image.url)}"
-            alt="${this.escapeHtml(image.title || 'Image')}"
-            class="w-full h-full object-cover"
-            loading="lazy"
-            onerror="this.parentElement.remove()"
-          >
-          ${dimensions ? `<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/70 text-white text-xs px-2 py-1 rounded font-mono">${dimensions}</div>` : ''}
-          <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1">
-            <div class="text-white text-xs truncate">${this.escapeHtml(image.source || '')}</div>
-          </div>
-        </button>
-      `
-    }).join("")
-  }
-
-  async insertImage() {
-    if (!this.selectedImage || !this.hasTextareaTarget) return
-
-    let imageUrl
-
-    if (this.selectedImage.type === "local") {
-      // Local server image
-      const uploadToS3 = this.s3Enabled && this.hasUploadToS3Target && this.uploadToS3Target.checked
-      const resizeRatio = uploadToS3 && this.hasResizeSelectLocalTarget ? this.resizeSelectLocalTarget.value : ""
-      imageUrl = `/images/preview/${this.encodePath(this.selectedImage.path)}`
-
-      if (uploadToS3) {
-        // Show loading state
-        this.showImageLoading(resizeRatio ? "Resizing and uploading to S3..." : "Uploading to S3...")
-        this.insertImageBtnTarget.disabled = true
-
-        try {
-          const response = await fetch("/images/upload_to_s3", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-CSRF-Token": this.csrfToken
-            },
-            body: JSON.stringify({ path: this.selectedImage.path, resize: resizeRatio })
-          })
-
-          if (!response.ok) {
-            const data = await response.json()
-            throw new Error(data.error || "Failed to upload to S3")
-          }
-
-          const data = await response.json()
-          imageUrl = data.url
-        } catch (error) {
-          console.error("Error uploading to S3:", error)
-          alert(`Failed to upload to S3: ${error.message}`)
-          this.hideImageLoading()
-          this.insertImageBtnTarget.disabled = false
-          return
-        }
-
-        this.hideImageLoading()
-      }
-    } else if (this.selectedImage.type === "local-folder") {
-      // Image from browser folder picker - must upload to server
-      const uploadToS3 = this.s3Enabled && this.hasUploadFolderToS3Target && this.uploadFolderToS3Target.checked
-      const resizeRatio = this.hasResizeSelectFolderTarget ? this.resizeSelectFolderTarget.value : ""
-
-      // Show loading state
-      const loadingMsg = uploadToS3
-        ? (resizeRatio ? "Resizing and uploading to S3..." : "Uploading to S3...")
-        : (resizeRatio ? "Resizing and saving..." : "Saving image...")
-      this.showImageLoading(loadingMsg)
-      this.insertImageBtnTarget.disabled = true
-
-      try {
-        const data = await this.uploadLocalFolderImage(
-          this.selectedImage.file,
-          resizeRatio,
-          uploadToS3
-        )
-        imageUrl = data.url
-      } catch (error) {
-        console.error("Error uploading folder image:", error)
-        alert(`Failed to upload image: ${error.message}`)
-        this.hideImageLoading()
-        this.insertImageBtnTarget.disabled = false
-        return
-      }
-
-      this.hideImageLoading()
-    } else if (this.selectedImage.type === "ai-generated") {
-      // AI-generated image - needs to be saved/uploaded
-      if (!this.generatedImageData) {
-        alert("No generated image data available")
-        return
-      }
-
-      const uploadToS3 = this.s3Enabled && this.hasAiImageSaveS3Target && this.aiImageSaveS3Target.checked
-
-      // Show loading state
-      const loadingMsg = uploadToS3 ? "Uploading to S3..." : "Saving image..."
-      this.showImageLoading(loadingMsg)
-      this.insertImageBtnTarget.disabled = true
-
-      try {
-        // If we have base64 data, upload it
-        if (this.generatedImageData.data) {
-          const response = await fetch("/images/upload_base64", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-CSRF-Token": this.csrfToken
-            },
-            body: JSON.stringify({
-              data: this.generatedImageData.data,
-              mime_type: this.generatedImageData.mime_type,
-              filename: `ai_${Date.now()}.png`,
-              upload_to_s3: uploadToS3
-            })
-          })
-
-          if (!response.ok) {
-            const data = await response.json()
-            throw new Error(data.error || "Failed to save image")
-          }
-
-          const data = await response.json()
-          imageUrl = data.url
-        } else if (this.generatedImageData.url) {
-          // If we have a URL (less common for AI generation), use it directly or re-upload to S3
-          if (uploadToS3) {
-            const response = await fetch("/images/upload_external_to_s3", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "X-CSRF-Token": this.csrfToken
-              },
-              body: JSON.stringify({ url: this.generatedImageData.url })
-            })
-
-            if (!response.ok) {
-              const data = await response.json()
-              throw new Error(data.error || "Failed to upload to S3")
-            }
-
-            const data = await response.json()
-            imageUrl = data.url
-          } else {
-            imageUrl = this.generatedImageData.url
-          }
-        }
-      } catch (error) {
-        console.error("Error saving AI-generated image:", error)
-        alert(`Failed to save image: ${error.message}`)
-        this.hideImageLoading()
-        this.insertImageBtnTarget.disabled = false
-        return
-      }
-
-      this.hideImageLoading()
-    } else {
-      // External image (Google/Pinterest/Web)
-      const reuploadToS3 = this.s3Enabled && this.hasReuploadToS3Target && this.reuploadToS3Target.checked
-      const resizeRatio = reuploadToS3 && this.hasResizeSelectExternalTarget ? this.resizeSelectExternalTarget.value : ""
-      imageUrl = this.selectedImage.url
-
-      if (reuploadToS3) {
-        // Show loading state
-        this.showImageLoading(resizeRatio ? "Downloading, resizing and uploading to S3..." : "Downloading and uploading to S3...")
-        this.insertImageBtnTarget.disabled = true
-
-        try {
-          const response = await fetch("/images/upload_external_to_s3", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-CSRF-Token": this.csrfToken
-            },
-            body: JSON.stringify({ url: this.selectedImage.url, resize: resizeRatio })
-          })
-
-          if (!response.ok) {
-            const data = await response.json()
-            throw new Error(data.error || "Failed to upload to S3")
-          }
-
-          const data = await response.json()
-          imageUrl = data.url
-        } catch (error) {
-          console.error("Error uploading external image to S3:", error)
-          alert(`Failed to upload to S3: ${error.message}`)
-          this.hideImageLoading()
-          this.insertImageBtnTarget.disabled = false
-          return
-        }
-
-        this.hideImageLoading()
-      }
-    }
-
-    // Build markdown
-    const altText = this.imageAltTarget.value.trim() || this.selectedImage.name || this.selectedImage.title || "Image"
-    const linkUrl = this.imageLinkTarget.value.trim()
-
-    let markdown = `![${altText}](${imageUrl})`
-
-    if (linkUrl) {
-      markdown = `[![${altText}](${imageUrl})](${linkUrl})`
-    }
-
-    // Insert at cursor
     const textarea = this.textareaTarget
-    const cursorPos = textarea.selectionStart
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
     const text = textarea.value
-    const before = text.substring(0, cursorPos)
-    const after = text.substring(cursorPos)
+
+    // Insert markdown at cursor position
+    const before = text.substring(0, start)
+    const after = text.substring(end)
 
     // Add newlines if needed
-    const prefix = before.length > 0 && !before.endsWith("\n") ? "\n\n" : ""
-    const suffix = after.length > 0 && !after.startsWith("\n") ? "\n\n" : ""
+    const needsNewlineBefore = before.length > 0 && !before.endsWith("\n")
+    const needsNewlineAfter = after.length > 0 && !after.startsWith("\n")
 
-    textarea.value = before + prefix + markdown + suffix + after
+    const insert = (needsNewlineBefore ? "\n" : "") + markdown + (needsNewlineAfter ? "\n" : "")
+    textarea.value = before + insert + after
 
-    const newPos = before.length + prefix.length + markdown.length
-    textarea.setSelectionRange(newPos, newPos)
+    // Position cursor after inserted markdown
+    const newPosition = start + insert.length
+    textarea.setSelectionRange(newPosition, newPosition)
     textarea.focus()
 
     this.scheduleAutoSave()
     this.updatePreview()
-    this.closeImageDialog()
   }
 
-  onS3CheckboxChange(event) {
-    if (this.hasResizeOptionLocalTarget) {
-      this.resizeOptionLocalTarget.classList.toggle("hidden", !event.target.checked)
-      if (!event.target.checked && this.hasResizeSelectLocalTarget) {
-        this.resizeSelectLocalTarget.value = "0.5"  // Reset to default
+  // Open image picker dialog (delegates to image-picker controller)
+  openImagePicker() {
+    // Find and open the image picker controller's dialog
+    const imagePickerElement = document.querySelector('[data-controller~="image-picker"]')
+    if (imagePickerElement) {
+      const imagePickerController = this.application.getControllerForElementAndIdentifier(
+        imagePickerElement,
+        "image-picker"
+      )
+      if (imagePickerController) {
+        imagePickerController.open()
       }
-    }
-  }
-
-  onS3ExternalCheckboxChange(event) {
-    if (this.hasResizeOptionExternalTarget) {
-      this.resizeOptionExternalTarget.classList.toggle("hidden", !event.target.checked)
-      if (!event.target.checked && this.hasResizeSelectExternalTarget) {
-        this.resizeSelectExternalTarget.value = "0.5"  // Reset to default
-      }
-    }
-  }
-
-  showImageLoading(message) {
-    if (this.hasImageLoadingTarget) {
-      this.imageLoadingTarget.classList.remove("hidden")
-      this.imageLoadingTarget.classList.add("flex")
-    }
-    if (this.hasImageLoadingTextTarget) {
-      this.imageLoadingTextTarget.textContent = message
-    }
-  }
-
-  hideImageLoading() {
-    if (this.hasImageLoadingTarget) {
-      this.imageLoadingTarget.classList.add("hidden")
-      this.imageLoadingTarget.classList.remove("flex")
     }
   }
 
@@ -2609,7 +1168,7 @@ export default class extends Controller {
   // Reload .fed content if it's open in the editor
   async reloadCurrentConfigFile() {
     try {
-      const response = await fetch(`/notes/${this.encodePath(".fed")}`, {
+      const response = await fetch(`/notes/${encodePath(".fed")}`, {
         headers: { "Accept": "application/json" }
       })
 
@@ -2866,7 +1425,7 @@ export default class extends Controller {
   // File Finder (Ctrl+P)
   openFileFinder() {
     // Build flat list of all files from tree
-    this.allFiles = this.flattenTree(this.treeValue)
+    this.allFiles = flattenTree(this.treeValue)
     this.fileFinderResults = [...this.allFiles].slice(0, 10)
     this.selectedFileIndex = 0
 
@@ -2880,18 +1439,6 @@ export default class extends Controller {
     this.fileFinderDialogTarget.close()
   }
 
-  flattenTree(items, result = []) {
-    if (!items) return result
-    for (const item of items) {
-      if (item.type === "file") {
-        result.push(item)
-      } else if (item.type === "folder" && item.children) {
-        this.flattenTree(item.children, result)
-      }
-    }
-    return result
-  }
-
   onFileFinderInput() {
     const query = this.fileFinderInputTarget.value.trim().toLowerCase()
 
@@ -2901,7 +1448,7 @@ export default class extends Controller {
       // Fuzzy search: search in full path (including directories)
       this.fileFinderResults = this.allFiles
         .map(file => {
-          const score = this.fuzzyScore(file.path.toLowerCase(), query)
+          const score = fuzzyScore(file.path.toLowerCase(), query)
           return { ...file, score }
         })
         .filter(file => file.score > 0)
@@ -2911,46 +1458,6 @@ export default class extends Controller {
 
     this.selectedFileIndex = 0
     this.renderFileFinderResults()
-  }
-
-  fuzzyScore(str, query) {
-    let score = 0
-    let strIndex = 0
-    let prevMatchIndex = -1
-    let consecutiveBonus = 0
-
-    for (let i = 0; i < query.length; i++) {
-      const char = query[i]
-      const foundIndex = str.indexOf(char, strIndex)
-
-      if (foundIndex === -1) {
-        return 0 // Character not found, no match
-      }
-
-      // Base score for finding the character
-      score += 1
-
-      // Bonus for consecutive matches
-      if (foundIndex === prevMatchIndex + 1) {
-        consecutiveBonus += 2
-        score += consecutiveBonus
-      } else {
-        consecutiveBonus = 0
-      }
-
-      // Bonus for matching at start or after separator
-      if (foundIndex === 0 || str[foundIndex - 1] === '/' || str[foundIndex - 1] === '-' || str[foundIndex - 1] === '_') {
-        score += 3
-      }
-
-      prevMatchIndex = foundIndex
-      strIndex = foundIndex + 1
-    }
-
-    // Bonus for shorter names (more precise match)
-    score += Math.max(0, 10 - (str.length - query.length))
-
-    return score
   }
 
   renderFileFinderResults() {
@@ -2976,15 +1483,15 @@ export default class extends Controller {
             type="button"
             class="w-full px-3 py-2 text-left flex items-center gap-2 ${isSelected ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-text)]' : 'hover:bg-[var(--theme-bg-hover)]'}"
             data-index="${index}"
-            data-path="${this.escapeHtml(file.path)}"
+            data-path="${escapeHtml(file.path)}"
             data-action="click->app#selectFileFromFinder mouseenter->app#hoverFileFinderResult"
           >
             <svg class="w-4 h-4 flex-shrink-0 ${isSelected ? '' : 'text-[var(--theme-text-muted)]'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
             <div class="min-w-0 flex-1">
-              <div class="truncate font-medium">${this.escapeHtml(name)}</div>
-              ${displayPath ? `<div class="truncate text-xs ${isSelected ? 'opacity-75' : 'text-[var(--theme-text-muted)]'}">${this.escapeHtml(displayPath)}</div>` : ''}
+              <div class="truncate font-medium">${escapeHtml(name)}</div>
+              ${displayPath ? `<div class="truncate text-xs ${isSelected ? 'opacity-75' : 'text-[var(--theme-text-muted)]'}">${escapeHtml(displayPath)}</div>` : ''}
             </div>
           </button>
         `
@@ -3004,7 +1511,7 @@ export default class extends Controller {
     if (!file) return
 
     try {
-      const response = await fetch(`/notes/${this.encodePath(file.path)}`, {
+      const response = await fetch(`/notes/${encodePath(file.path)}`, {
         headers: { "Accept": "application/json" }
       })
 
@@ -3017,7 +1524,7 @@ export default class extends Controller {
       const lines = (data.content || "").split("\n").slice(0, 10)
       const preview = lines.join("\n")
 
-      this.fileFinderPreviewTarget.innerHTML = `<pre class="text-xs font-mono whitespace-pre-wrap text-[var(--theme-text-secondary)] leading-relaxed">${this.escapeHtml(preview)}${lines.length >= 10 ? '\n...' : ''}</pre>`
+      this.fileFinderPreviewTarget.innerHTML = `<pre class="text-xs font-mono whitespace-pre-wrap text-[var(--theme-text-secondary)] leading-relaxed">${escapeHtml(preview)}${lines.length >= 10 ? '\n...' : ''}</pre>`
     } catch (error) {
       this.fileFinderPreviewTarget.innerHTML = `<div class="text-[var(--theme-text-muted)] text-sm">Unable to load preview</div>`
     }
@@ -3166,7 +1673,7 @@ export default class extends Controller {
           const lineClass = line.is_match
             ? "bg-[var(--theme-selection)] text-[var(--theme-selection-text)]"
             : ""
-          const escapedContent = this.escapeHtml(line.content)
+          const escapedContent = escapeHtml(line.content)
           return `<div class="flex ${lineClass}">
             <span class="w-10 flex-shrink-0 text-right pr-2 text-[var(--theme-text-faint)] select-none">${line.line_number}</span>
             <span class="flex-1 overflow-hidden text-ellipsis">${escapedContent}</span>
@@ -3182,7 +1689,7 @@ export default class extends Controller {
             type="button"
             class="w-full text-left border-b border-[var(--theme-border)] last:border-b-0 ${selectedClass}"
             data-index="${index}"
-            data-path="${this.escapeHtml(result.path)}"
+            data-path="${escapeHtml(result.path)}"
             data-line="${result.line_number}"
             data-action="click->app#selectContentSearchResult mouseenter->app#hoverContentSearchResult"
           >
@@ -3191,9 +1698,9 @@ export default class extends Controller {
                 <svg class="w-4 h-4 flex-shrink-0 ${isSelected ? '' : 'text-[var(--theme-text-muted)]'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <span class="font-medium truncate">${this.escapeHtml(result.name)}</span>
+                <span class="font-medium truncate">${escapeHtml(result.name)}</span>
                 <span class="text-xs ${isSelected ? 'opacity-80' : 'text-[var(--theme-text-muted)]'}">:${result.line_number}</span>
-                <span class="text-xs ${isSelected ? 'opacity-70' : 'text-[var(--theme-text-faint)]'} truncate ml-auto">${this.escapeHtml(result.path.replace(/\.md$/, ""))}</span>
+                <span class="text-xs ${isSelected ? 'opacity-70' : 'text-[var(--theme-text-faint)]'} truncate ml-auto">${escapeHtml(result.path.replace(/\.md$/, ""))}</span>
               </div>
               <div class="font-mono text-xs leading-relaxed overflow-hidden ${isSelected ? 'bg-black/20' : 'bg-[var(--theme-bg-tertiary)]'} rounded p-2">
                 ${contextHtml}
@@ -3330,7 +1837,7 @@ export default class extends Controller {
     if (this.hasTextareaTarget) {
       const text = this.textareaTarget.value
       const cursorPos = this.textareaTarget.selectionStart
-      const codeBlock = this.findCodeBlockAtPosition(text, cursorPos)
+      const codeBlock = findCodeBlockAtPosition(text, cursorPos)
 
       if (codeBlock) {
         // Edit existing code block
@@ -3367,28 +1874,6 @@ export default class extends Controller {
 
   closeAboutDialog() {
     this.aboutDialogTarget.close()
-  }
-
-  findCodeBlockAtPosition(text, pos) {
-    // Find fenced code blocks using regex
-    const codeBlockRegex = /```(\w*)\n([\s\S]*?)```/g
-    let match
-
-    while ((match = codeBlockRegex.exec(text)) !== null) {
-      const startPos = match.index
-      const endPos = match.index + match[0].length
-
-      if (pos >= startPos && pos <= endPos) {
-        return {
-          startPos,
-          endPos,
-          language: match[1],
-          content: match[2]
-        }
-      }
-    }
-
-    return null
   }
 
   onCodeLanguageInput() {
@@ -3573,7 +2058,7 @@ export default class extends Controller {
     if (language && !this.codeLanguages.includes(language.toLowerCase())) {
       const isClose = this.codeLanguages.some(lang =>
         lang.startsWith(language.toLowerCase()) ||
-        this.levenshteinDistance(lang, language.toLowerCase()) <= 2
+        levenshteinDistance(lang, language.toLowerCase()) <= 2
       )
       if (!isClose) {
         const proceed = confirm(`"${language}" is not a recognized language. Insert anyway?`)
@@ -3631,30 +2116,6 @@ export default class extends Controller {
   }
 
   // Simple Levenshtein distance for typo detection
-  levenshteinDistance(a, b) {
-    const matrix = []
-    for (let i = 0; i <= b.length; i++) {
-      matrix[i] = [i]
-    }
-    for (let j = 0; j <= a.length; j++) {
-      matrix[0][j] = j
-    }
-    for (let i = 1; i <= b.length; i++) {
-      for (let j = 1; j <= a.length; j++) {
-        if (b.charAt(i - 1) === a.charAt(j - 1)) {
-          matrix[i][j] = matrix[i - 1][j - 1]
-        } else {
-          matrix[i][j] = Math.min(
-            matrix[i - 1][j - 1] + 1,
-            matrix[i][j - 1] + 1,
-            matrix[i - 1][j] + 1
-          )
-        }
-      }
-    }
-    return matrix[b.length][a.length]
-  }
-
   // Video Dialog
   openVideoDialog() {
     // Reset URL tab
@@ -3818,7 +2279,7 @@ export default class extends Controller {
       this.aiDiffContentTarget.classList.add("flex")
 
       // Compute and display diff (use original from server response)
-      const diff = this.computeWordDiff(data.original, data.corrected)
+      const diff = computeWordDiff(data.original, data.corrected)
       this.aiOriginalTextTarget.innerHTML = this.renderDiffOriginal(diff)
       this.aiCorrectedDiffTarget.innerHTML = this.renderDiffCorrected(diff)
       this.aiCorrectedTextTarget.value = data.corrected
@@ -3880,74 +2341,6 @@ export default class extends Controller {
   }
 
   // Word-level diff computation using Myers' diff algorithm (simplified)
-  computeWordDiff(original, corrected) {
-    // Tokenize into words while preserving whitespace
-    const tokenize = (text) => {
-      const tokens = []
-      const regex = /(\s+|\S+)/g
-      let match
-      while ((match = regex.exec(text)) !== null) {
-        tokens.push(match[0])
-      }
-      return tokens
-    }
-
-    const oldTokens = tokenize(original)
-    const newTokens = tokenize(corrected)
-
-    // Simple LCS-based diff
-    const diff = this.lcsWordDiff(oldTokens, newTokens)
-    return diff
-  }
-
-  // LCS-based word diff
-  lcsWordDiff(oldTokens, newTokens) {
-    const m = oldTokens.length
-    const n = newTokens.length
-
-    // Build LCS table
-    const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0))
-    for (let i = 1; i <= m; i++) {
-      for (let j = 1; j <= n; j++) {
-        if (oldTokens[i - 1] === newTokens[j - 1]) {
-          dp[i][j] = dp[i - 1][j - 1] + 1
-        } else {
-          dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1])
-        }
-      }
-    }
-
-    // Backtrack to find diff
-    const diff = []
-    let i = m, j = n
-    const tempDiff = []
-
-    while (i > 0 || j > 0) {
-      if (i > 0 && j > 0 && oldTokens[i - 1] === newTokens[j - 1]) {
-        tempDiff.unshift({ type: 'equal', value: oldTokens[i - 1] })
-        i--
-        j--
-      } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
-        tempDiff.unshift({ type: 'insert', value: newTokens[j - 1] })
-        j--
-      } else {
-        tempDiff.unshift({ type: 'delete', value: oldTokens[i - 1] })
-        i--
-      }
-    }
-
-    // Merge consecutive operations of the same type
-    for (const item of tempDiff) {
-      if (diff.length > 0 && diff[diff.length - 1].type === item.type) {
-        diff[diff.length - 1].value += item.value
-      } else {
-        diff.push({ ...item })
-      }
-    }
-
-    return diff
-  }
-
   // Render diff for the original text column (shows deletions)
   renderDiffOriginal(diff) {
     const escapeHtml = (text) => {
@@ -4037,7 +2430,7 @@ export default class extends Controller {
     }
 
     // Check for YouTube
-    const youtubeId = this.extractYouTubeId(url)
+    const youtubeId = extractYouTubeId(url)
     if (youtubeId) {
       this.detectedVideoType = "youtube"
       this.detectedVideoData = { id: youtubeId }
@@ -4083,7 +2476,7 @@ export default class extends Controller {
           </svg>
           <div>
             <div class="font-medium text-[var(--theme-text-primary)]">Video File</div>
-            <div class="text-xs text-[var(--theme-text-muted)] truncate max-w-[350px]">${this.escapeHtml(filename)}</div>
+            <div class="text-xs text-[var(--theme-text-muted)] truncate max-w-[350px]">${escapeHtml(filename)}</div>
           </div>
         </div>
       `
@@ -4103,21 +2496,6 @@ export default class extends Controller {
       event.preventDefault()
       this.insertVideo()
     }
-  }
-
-  extractYouTubeId(url) {
-    // Match various YouTube URL formats
-    const patterns = [
-      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/,
-      /^([a-zA-Z0-9_-]{11})$/ // Just the ID
-    ]
-
-    for (const pattern of patterns) {
-      const match = url.match(pattern)
-      if (match) return match[1]
-    }
-
-    return null
   }
 
   insertVideo() {
@@ -4154,7 +2532,7 @@ export default class extends Controller {
       const mimeType = mimeTypes[ext] || "video/mp4"
 
       embedCode = `<video controls class="video-player">
-  <source src="${this.escapeHtml(url)}" type="${mimeType}">
+  <source src="${escapeHtml(url)}" type="${mimeType}">
   Your browser does not support the video tag.
 </video>`
     }
@@ -4251,14 +2629,14 @@ export default class extends Controller {
           type="button"
           data-index="${index}"
           data-video-id="${video.id}"
-          data-video-title="${this.escapeHtml(video.title)}"
+          data-video-title="${escapeHtml(video.title)}"
           data-action="click->app#selectYoutubeVideo keydown->app#onYoutubeResultKeydown"
           class="flex flex-col rounded-lg overflow-hidden bg-[var(--theme-bg-tertiary)] hover:bg-[var(--theme-bg-hover)] transition-colors ${selectedClass} focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)]"
         >
           <div class="relative aspect-video bg-[var(--theme-bg-tertiary)]">
             <img
               src="${video.thumbnail}"
-              alt="${this.escapeHtml(video.title)}"
+              alt="${escapeHtml(video.title)}"
               class="w-full h-full object-cover"
               onerror="this.style.display='none'"
             >
@@ -4269,8 +2647,8 @@ export default class extends Controller {
             </div>
           </div>
           <div class="p-2">
-            <div class="text-xs font-medium text-[var(--theme-text-primary)] line-clamp-2">${this.escapeHtml(video.title)}</div>
-            <div class="text-xs text-[var(--theme-text-muted)] truncate mt-0.5">${this.escapeHtml(video.channel)}</div>
+            <div class="text-xs font-medium text-[var(--theme-text-primary)] line-clamp-2">${escapeHtml(video.title)}</div>
+            <div class="text-xs text-[var(--theme-text-muted)] truncate mt-0.5">${escapeHtml(video.channel)}</div>
           </div>
         </button>
       `
@@ -4413,9 +2791,9 @@ export default class extends Controller {
     try {
       if (this.newItemType === "hugo") {
         // Create Hugo blog post with directory structure YYYY/MM/DD/slug/index.md
-        const { notePath, content } = this.generateHugoBlogPost(name)
+        const { notePath, content } = generateHugoBlogPost(name)
 
-        const response = await fetch(`/notes/${this.encodePath(notePath)}`, {
+        const response = await fetch(`/notes/${encodePath(notePath)}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -4441,7 +2819,7 @@ export default class extends Controller {
         await this.loadFile(notePath)
       } else if (this.newItemType === "note") {
         const notePath = basePath.endsWith(".md") ? basePath : `${basePath}.md`
-        const response = await fetch(`/notes/${this.encodePath(notePath)}`, {
+        const response = await fetch(`/notes/${encodePath(notePath)}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -4459,7 +2837,7 @@ export default class extends Controller {
         await this.loadFile(notePath)
       } else {
         // Folder
-        const response = await fetch(`/folders/${this.encodePath(basePath)}`, {
+        const response = await fetch(`/folders/${encodePath(basePath)}`, {
           method: "POST",
           headers: {
             "X-CSRF-Token": this.csrfToken
@@ -4480,89 +2858,6 @@ export default class extends Controller {
       console.error("Error creating item:", error)
       alert(error.message)
     }
-  }
-
-  // Generate Hugo blog post path and content
-  generateHugoBlogPost(title) {
-    const now = new Date()
-    const year = now.getFullYear()
-    const month = String(now.getMonth() + 1).padStart(2, "0")
-    const day = String(now.getDate()).padStart(2, "0")
-
-    // Generate slug from title
-    const slug = this.slugify(title)
-
-    // Build path: YYYY/MM/DD/slug/index.md
-    const dirPath = `${year}/${month}/${day}/${slug}`
-    const notePath = `${dirPath}/index.md`
-
-    // Generate ISO date with timezone offset
-    const tzOffset = -now.getTimezoneOffset()
-    const tzHours = String(Math.floor(Math.abs(tzOffset) / 60)).padStart(2, "0")
-    const tzMins = String(Math.abs(tzOffset) % 60).padStart(2, "0")
-    const tzSign = tzOffset >= 0 ? "+" : "-"
-    const isoDate = `${year}-${month}-${day}T${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}${tzSign}${tzHours}${tzMins}`
-
-    // Generate Hugo frontmatter
-    const content = `---
-title: "${title.replace(/"/g, '\\"')}"
-slug: "${slug}"
-date: ${isoDate}
-draft: true
-tags:
--
----
-
-`
-
-    return { notePath, content }
-  }
-
-  // Slugify text for URLs - handles accented characters
-  slugify(text) {
-    // Map of accented characters to their ASCII equivalents
-    const accentMap = {
-      "à": "a", "á": "a", "â": "a", "ã": "a", "ä": "a", "å": "a", "æ": "ae",
-      "ç": "c", "č": "c", "ć": "c",
-      "è": "e", "é": "e", "ê": "e", "ë": "e", "ě": "e",
-      "ì": "i", "í": "i", "î": "i", "ï": "i",
-      "ð": "d", "ď": "d",
-      "ñ": "n", "ň": "n",
-      "ò": "o", "ó": "o", "ô": "o", "õ": "o", "ö": "o", "ø": "o",
-      "ù": "u", "ú": "u", "û": "u", "ü": "u", "ů": "u",
-      "ý": "y", "ÿ": "y",
-      "ž": "z", "ź": "z", "ż": "z",
-      "ß": "ss", "þ": "th",
-      "š": "s", "ś": "s",
-      "ř": "r",
-      "ł": "l",
-      "À": "A", "Á": "A", "Â": "A", "Ã": "A", "Ä": "A", "Å": "A", "Æ": "AE",
-      "Ç": "C", "Č": "C", "Ć": "C",
-      "È": "E", "É": "E", "Ê": "E", "Ë": "E", "Ě": "E",
-      "Ì": "I", "Í": "I", "Î": "I", "Ï": "I",
-      "Ð": "D", "Ď": "D",
-      "Ñ": "N", "Ň": "N",
-      "Ò": "O", "Ó": "O", "Ô": "O", "Õ": "O", "Ö": "O", "Ø": "O",
-      "Ù": "U", "Ú": "U", "Û": "U", "Ü": "U", "Ů": "U",
-      "Ý": "Y",
-      "Ž": "Z", "Ź": "Z", "Ż": "Z",
-      "Š": "S", "Ś": "S",
-      "Ř": "R",
-      "Ł": "L"
-    }
-
-    return text
-      .toLowerCase()
-      // Replace accented characters
-      .split("")
-      .map(char => accentMap[char] || char)
-      .join("")
-      // Replace any non-alphanumeric characters with hyphens
-      .replace(/[^a-z0-9]+/g, "-")
-      // Remove leading/trailing hyphens
-      .replace(/^-+|-+$/g, "")
-      // Collapse multiple hyphens
-      .replace(/-+/g, "-")
   }
 
   // Context Menu
@@ -4686,7 +2981,7 @@ tags:
 
     try {
       const endpoint = this.contextItem.type === "file" ? "notes" : "folders"
-      const response = await fetch(`/${endpoint}/${this.encodePath(oldPath)}/rename`, {
+      const response = await fetch(`/${endpoint}/${encodePath(oldPath)}/rename`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -4724,7 +3019,7 @@ tags:
 
     try {
       const endpoint = this.contextItem.type === "file" ? "notes" : "folders"
-      const response = await fetch(`/${endpoint}/${this.encodePath(this.contextItem.path)}`, {
+      const response = await fetch(`/${endpoint}/${encodePath(this.contextItem.path)}`, {
         method: "DELETE",
         headers: {
           "X-CSRF-Token": this.csrfToken
@@ -4861,17 +3156,6 @@ tags:
   }
 
   // Utilities
-  escapeHtml(text) {
-    const div = document.createElement("div")
-    div.textContent = text
-    return div.innerHTML
-  }
-
-  // Encode path for URL (encode each segment, preserve slashes)
-  encodePath(path) {
-    return path.split("/").map(segment => encodeURIComponent(segment)).join("/")
-  }
-
   // Get CSRF token safely
   get csrfToken() {
     const meta = document.querySelector('meta[name="csrf-token"]')
@@ -4945,46 +3229,21 @@ tags:
     if (!this.hasTextareaTarget || !this.hasStatsPanelTarget) return
 
     const text = this.textareaTarget.value
-
-    // Word count - split on whitespace and filter empty strings
-    const words = text.trim().split(/\s+/).filter(w => w.length > 0)
-    const wordCount = words.length
-
-    // Character count
-    const charCount = text.length
-
-    // File size (bytes -> human readable)
-    const byteSize = new Blob([text]).size
-    const sizeStr = this.formatFileSize(byteSize)
-
-    // Estimated reading time (average 200-250 words per minute)
-    const wordsPerMinute = 200
-    const readTimeMinutes = Math.ceil(wordCount / wordsPerMinute)
-    const readTimeStr = readTimeMinutes <= 1 ? "< 1 min" : `${readTimeMinutes} min`
+    const stats = calculateStats(text)
 
     // Update display
     if (this.hasStatsWordsTarget) {
-      this.statsWordsTarget.textContent = wordCount.toLocaleString()
+      this.statsWordsTarget.textContent = stats.wordCount.toLocaleString()
     }
     if (this.hasStatsCharsTarget) {
-      this.statsCharsTarget.textContent = charCount.toLocaleString()
+      this.statsCharsTarget.textContent = stats.charCount.toLocaleString()
     }
     if (this.hasStatsSizeTarget) {
-      this.statsSizeTarget.textContent = sizeStr
+      this.statsSizeTarget.textContent = formatFileSize(stats.byteSize)
     }
     if (this.hasStatsReadTimeTarget) {
-      this.statsReadTimeTarget.textContent = readTimeStr
+      this.statsReadTimeTarget.textContent = formatReadTime(stats.readTimeMinutes)
     }
   }
 
-  formatFileSize(bytes) {
-    if (bytes === 0) return "0 B"
-    const units = ["B", "KB", "MB", "GB"]
-    const k = 1024
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    const size = bytes / Math.pow(k, i)
-    // Show decimal only for KB and above, and only if meaningful
-    if (i === 0) return `${bytes} B`
-    return `${size.toFixed(size < 10 ? 1 : 0)} ${units[i]}`
-  }
 }
