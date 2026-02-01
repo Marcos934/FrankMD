@@ -818,7 +818,8 @@ export default class extends Controller {
       this.configSaveTimeout = null
     }
 
-    this.showSaveStatus(window.t("connection.offline_message"), true)
+    // Use short status since full message is shown in the orange banner
+    this.showSaveStatus(window.t("connection.disconnected"), true)
   }
 
   onConnectionRestored() {

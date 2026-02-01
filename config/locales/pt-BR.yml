@@ -120,6 +120,7 @@ pt-BR:
   # Status de conexão
   connection:
     offline_message: "Conexão perdida. Edição desabilitada até a conexão ser restaurada."
+    disconnected: "Desconectado"
     retry: "Tentar novamente"
 
   # Títulos e conteúdo dos diálogos

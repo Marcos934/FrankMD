@@ -120,6 +120,7 @@ en:
   # Connection status
   connection:
     offline_message: "Connection lost. Editing disabled until connection is restored."
+    disconnected: "Disconnected"
     retry: "Retry"
 
   # Dialog titles and content
