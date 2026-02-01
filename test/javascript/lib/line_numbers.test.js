@@ -5,41 +5,54 @@ import { describe, it, expect } from "vitest"
 import {
   LINE_NUMBER_MODES,
   normalizeLineNumberMode,
-  nextLineNumberMode,
-  buildRelativeLineLabels,
-  buildAbsoluteLineLabels
+  nextLineNumberMode
 } from "../../../app/javascript/lib/line_numbers.js"
 
 describe("line_numbers", () => {
-  it("normalizes line number mode", () => {
-    expect(normalizeLineNumberMode(undefined, LINE_NUMBER_MODES.OFF)).toBe(LINE_NUMBER_MODES.OFF)
-    expect(normalizeLineNumberMode("1", LINE_NUMBER_MODES.OFF)).toBe(LINE_NUMBER_MODES.ABSOLUTE)
-    expect(normalizeLineNumberMode(2, LINE_NUMBER_MODES.OFF)).toBe(LINE_NUMBER_MODES.RELATIVE)
+  describe("LINE_NUMBER_MODES", () => {
+    it("defines OFF as 0", () => {
+      expect(LINE_NUMBER_MODES.OFF).toBe(0)
+    })
+
+    it("defines ABSOLUTE as 1", () => {
+      expect(LINE_NUMBER_MODES.ABSOLUTE).toBe(1)
+    })
+
+    it("defines RELATIVE as 2", () => {
+      expect(LINE_NUMBER_MODES.RELATIVE).toBe(2)
+    })
   })
 
-  it("cycles line number modes", () => {
-    expect(nextLineNumberMode(LINE_NUMBER_MODES.OFF)).toBe(LINE_NUMBER_MODES.ABSOLUTE)
-    expect(nextLineNumberMode(LINE_NUMBER_MODES.ABSOLUTE)).toBe(LINE_NUMBER_MODES.RELATIVE)
-    expect(nextLineNumberMode(LINE_NUMBER_MODES.RELATIVE)).toBe(LINE_NUMBER_MODES.OFF)
+  describe("normalizeLineNumberMode", () => {
+    it("returns fallback for undefined value", () => {
+      expect(normalizeLineNumberMode(undefined, LINE_NUMBER_MODES.OFF)).toBe(LINE_NUMBER_MODES.OFF)
+    })
+
+    it("parses string values", () => {
+      expect(normalizeLineNumberMode("1", LINE_NUMBER_MODES.OFF)).toBe(LINE_NUMBER_MODES.ABSOLUTE)
+    })
+
+    it("accepts numeric values", () => {
+      expect(normalizeLineNumberMode(2, LINE_NUMBER_MODES.OFF)).toBe(LINE_NUMBER_MODES.RELATIVE)
+    })
+
+    it("returns fallback for invalid values", () => {
+      expect(normalizeLineNumberMode(99, LINE_NUMBER_MODES.ABSOLUTE)).toBe(LINE_NUMBER_MODES.ABSOLUTE)
+      expect(normalizeLineNumberMode("invalid", LINE_NUMBER_MODES.OFF)).toBe(LINE_NUMBER_MODES.OFF)
+    })
   })
 
-  it("builds absolute line labels with wrapped gaps", () => {
-    expect(buildAbsoluteLineLabels([1, 3, 1])).toEqual(["1", "2", "", "", "3"])
-  })
+  describe("nextLineNumberMode", () => {
+    it("cycles OFF to ABSOLUTE", () => {
+      expect(nextLineNumberMode(LINE_NUMBER_MODES.OFF)).toBe(LINE_NUMBER_MODES.ABSOLUTE)
+    })
 
-  it("builds relative line labels", () => {
-    // 5 logical lines, each with 1 visual line, cursor at logical line 2
-    expect(buildRelativeLineLabels([1, 1, 1, 1, 1], 2)).toEqual(["-2", "-1", "0", "1", "2"])
-  })
+    it("cycles ABSOLUTE to RELATIVE", () => {
+      expect(nextLineNumberMode(LINE_NUMBER_MODES.ABSOLUTE)).toBe(LINE_NUMBER_MODES.RELATIVE)
+    })
 
-  it("builds relative line labels with wrapped gaps", () => {
-    // 3 logical lines: line 1 has 1 visual, line 2 has 3 visuals (wrapped), line 3 has 1 visual
-    // Cursor at logical line 1
-    expect(buildRelativeLineLabels([1, 3, 1], 1)).toEqual(["-1", "0", "", "", "1"])
-  })
-
-  it("clamps cursor index", () => {
-    // 2 logical lines, cursor at logical line 10 (clamped to 1)
-    expect(buildRelativeLineLabels([1, 1], 10)).toEqual(["-1", "0"])
+    it("cycles RELATIVE to OFF", () => {
+      expect(nextLineNumberMode(LINE_NUMBER_MODES.RELATIVE)).toBe(LINE_NUMBER_MODES.OFF)
+    })
   })
 })

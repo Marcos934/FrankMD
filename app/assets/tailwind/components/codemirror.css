@@ -1,169 +1,403 @@
-/* CodeMirror theme overrides */
+/*
+ * CodeMirror 6 Editor Styles
+ * Customizations for CodeMirror to match the FrankMD theme system
+ * Uses CSS variables for dynamic theme support
+ */
+
 @layer components {
+  /* Container styling */
+  .cm-editor-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: var(--theme-bg-primary);
+  }
+
+  /* Editor takes full height */
   .cm-editor {
     height: 100%;
-    font-family: var(--font-mono);
-    font-size: 14px;
+    outline: none;
+    background: var(--theme-bg-primary);
+    color: var(--theme-text-primary);
   }
 
+  /* Content area - respects editor width setting */
+  .cm-editor .cm-content {
+    max-width: var(--editor-width, 72ch);
+    margin: 0 auto;
+    padding: 1rem 2rem;
+    caret-color: var(--theme-text-primary);
+  }
+
+  /* Ensure scroller fills height */
   .cm-editor .cm-scroller {
+    height: 100%;
     font-family: inherit;
     line-height: 1.6;
+    overflow: auto;
   }
 
-  .cm-editor .cm-content {
-    padding: 1rem;
+  /* Line styling */
+  .cm-editor .cm-line {
+    padding: 0;
   }
 
+  /* Gutters (line numbers) */
   .cm-editor .cm-gutters {
-    background: transparent;
-    border-right: none;
+    background: var(--theme-bg-secondary);
+    color: var(--theme-text-faint);
+    border-right: 1px solid var(--theme-border);
+    font-size: 0.75rem;
   }
 
+  .cm-editor .cm-gutter {
+    min-width: 3ch;
+  }
+
+  .cm-editor .cm-lineNumbers .cm-gutterElement {
+    padding: 0 0.75rem 0 0.5rem;
+    min-width: 2.5rem;
+    text-align: right;
+  }
+
+  /* Active line gutter highlight */
+  .cm-editor .cm-activeLineGutter {
+    background: transparent;
+    color: var(--theme-text-muted);
+  }
+
+  /* Cursor */
+  .cm-editor .cm-cursor,
+  .cm-editor .cm-dropCursor {
+    border-left: 2px solid var(--theme-text-primary);
+  }
+
+  /* Selection */
+  .cm-editor.cm-focused .cm-selectionBackground,
+  .cm-editor .cm-selectionBackground,
+  .cm-editor .cm-content ::selection {
+    background: var(--theme-selection) !important;
+  }
+
+  /* Active line - transparent to not conflict with selection */
+  .cm-editor.cm-focused .cm-activeLine {
+    background: transparent;
+  }
+
+  /* Placeholder text */
+  .cm-editor .cm-placeholder {
+    color: var(--theme-text-faint);
+    font-style: italic;
+  }
+
+  /* Focus styles */
   .cm-editor.cm-focused {
     outline: none;
   }
 
-  /* Light theme */
-  .cm-editor {
-    background: #ffffff;
-    color: #18181b;
-  }
+  /* === Markdown Syntax Highlighting === */
 
-  .cm-editor .cm-gutters {
-    color: #a1a1aa;
-  }
-
-  .cm-editor .cm-activeLineGutter {
-    background: #f4f4f5;
-  }
-
-  .cm-editor .cm-activeLine {
-    background: #f4f4f5;
-  }
-
-  .cm-editor .cm-selectionBackground {
-    background: #bfdbfe !important;
-  }
-
-  .cm-editor .cm-cursor {
-    border-left-color: #18181b;
-  }
-
-  /* Dark theme */
-  .dark .cm-editor {
-    background: #18181b;
-    color: #fafafa;
-  }
-
-  .dark .cm-editor .cm-gutters {
-    color: #52525b;
-  }
-
-  .dark .cm-editor .cm-activeLineGutter {
-    background: #27272a;
-  }
-
-  .dark .cm-editor .cm-activeLine {
-    background: #27272a;
-  }
-
-  .dark .cm-editor .cm-selectionBackground {
-    background: #3b82f680 !important;
-  }
-
-  .dark .cm-editor .cm-cursor {
-    border-left-color: #fafafa;
-  }
-
-  /* Markdown syntax highlighting */
-  .cm-editor .cm-header {
+  /* Headings */
+  .cm-editor .cm-header,
+  .cm-editor .cm-heading {
     font-weight: 600;
   }
 
-  .cm-editor .cm-header-1 {
-    font-size: 1.5em;
-    color: #2563eb;
+  .cm-editor .cm-header-1,
+  .cm-editor .cm-heading-1 {
+    color: var(--theme-heading-1);
+    font-weight: bold;
   }
 
-  .cm-editor .cm-header-2 {
-    font-size: 1.3em;
-    color: #7c3aed;
+  .cm-editor .cm-header-2,
+  .cm-editor .cm-heading-2 {
+    color: var(--theme-heading-2);
+    font-weight: bold;
   }
 
-  .cm-editor .cm-header-3 {
-    font-size: 1.15em;
-    color: #0891b2;
+  .cm-editor .cm-header-3,
+  .cm-editor .cm-heading-3 {
+    color: var(--theme-heading-3);
+    font-weight: bold;
   }
 
-  .dark .cm-editor .cm-header-1 {
-    color: #60a5fa;
+  .cm-editor .cm-header-4,
+  .cm-editor .cm-header-5,
+  .cm-editor .cm-header-6,
+  .cm-editor .cm-heading-4,
+  .cm-editor .cm-heading-5,
+  .cm-editor .cm-heading-6 {
+    color: var(--theme-accent);
+    font-weight: bold;
   }
 
-  .dark .cm-editor .cm-header-2 {
-    color: #a78bfa;
-  }
-
-  .dark .cm-editor .cm-header-3 {
-    color: #22d3ee;
-  }
-
-  .cm-editor .cm-link {
-    color: #2563eb;
-    text-decoration: underline;
-  }
-
-  .dark .cm-editor .cm-link {
-    color: #60a5fa;
-  }
-
-  .cm-editor .cm-url {
-    color: #6b7280;
-  }
-
-  .dark .cm-editor .cm-url {
-    color: #9ca3af;
-  }
-
-  .cm-editor .cm-quote {
-    color: #16a34a;
-    font-style: italic;
-  }
-
-  .dark .cm-editor .cm-quote {
-    color: #4ade80;
-  }
-
-  .cm-editor .cm-formatting-code-inline,
-  .cm-editor .cm-inline-code {
-    background: #f4f4f5;
-    padding: 0.125rem 0.25rem;
-    border-radius: 0.25rem;
-    font-size: 0.9em;
-  }
-
-  .dark .cm-editor .cm-formatting-code-inline,
-  .dark .cm-editor .cm-inline-code {
-    background: #27272a;
-  }
-
-  .cm-editor .cm-formatting-list {
-    color: #f97316;
-  }
-
-  .dark .cm-editor .cm-formatting-list {
-    color: #fb923c;
-  }
-
+  /* Emphasis */
   .cm-editor .cm-strong {
-    font-weight: 700;
+    font-weight: bold;
+    color: var(--theme-text-primary);
   }
 
   .cm-editor .cm-em {
     font-style: italic;
+    color: var(--theme-text-muted);
   }
 
   .cm-editor .cm-strikethrough {
     text-decoration: line-through;
+    color: var(--theme-text-muted);
+  }
+
+  /* Inline code */
+  .cm-editor .cm-monospace,
+  .cm-editor .cm-formatting-code-inline,
+  .cm-editor .cm-inline-code {
+    color: var(--theme-accent);
+    background: var(--theme-code-bg);
+    border-radius: 0.25rem;
+    padding: 0 0.25rem;
+    font-family: inherit;
+  }
+
+  /* Code blocks */
+  .cm-editor .cm-codeBlock {
+    background: var(--theme-code-bg);
+  }
+
+  /* Links */
+  .cm-editor .cm-link {
+    color: var(--theme-accent);
+    text-decoration: underline;
+  }
+
+  .cm-editor .cm-url {
+    color: var(--theme-text-muted);
+  }
+
+  /* Blockquotes */
+  .cm-editor .cm-quote {
+    color: var(--theme-text-muted);
+    font-style: italic;
+  }
+
+  /* Lists */
+  .cm-editor .cm-list,
+  .cm-editor .cm-formatting-list {
+    color: var(--theme-text-muted);
+  }
+
+  /* Meta/syntax characters (like # for headings, * for lists) */
+  .cm-editor .cm-meta,
+  .cm-editor .cm-processingInstruction {
+    color: var(--theme-text-faint);
+  }
+
+  /* Horizontal rule */
+  .cm-editor .cm-hr,
+  .cm-editor .cm-contentSeparator {
+    color: var(--theme-border);
+  }
+
+  /* HTML in markdown */
+  .cm-editor .cm-angleBracket {
+    color: var(--theme-text-muted);
+  }
+
+  .cm-editor .cm-tagName {
+    color: var(--theme-accent);
+  }
+
+  .cm-editor .cm-attributeName {
+    color: var(--theme-heading-2);
+  }
+
+  .cm-editor .cm-attributeValue {
+    color: var(--theme-heading-3);
+  }
+
+  /* Comments */
+  .cm-editor .cm-comment {
+    color: var(--theme-text-faint);
+    font-style: italic;
+  }
+
+  /* === Search Highlighting === */
+
+  .cm-editor .cm-searchMatch {
+    background: var(--theme-selection);
+    outline: 1px solid var(--theme-accent);
+  }
+
+  .cm-editor .cm-searchMatch.cm-searchMatch-selected {
+    background: var(--theme-accent);
+    color: var(--theme-accent-text);
+  }
+
+  /* Selection matches (highlight all occurrences) */
+  .cm-editor .cm-selectionMatch {
+    background: color-mix(in srgb, var(--theme-selection) 50%, transparent);
+  }
+
+  /* === Matching Brackets === */
+
+  .cm-editor.cm-focused .cm-matchingBracket {
+    background: var(--theme-selection);
+    outline: 1px solid var(--theme-accent);
+  }
+
+  .cm-editor.cm-focused .cm-nonmatchingBracket {
+    background: rgba(255, 0, 0, 0.2);
+    outline: 1px solid rgba(255, 0, 0, 0.5);
+  }
+
+  /* === Panels (Search, etc.) === */
+
+  .cm-editor .cm-panels {
+    background: var(--theme-bg-secondary);
+    color: var(--theme-text-primary);
+    border-bottom: 1px solid var(--theme-border);
+  }
+
+  .cm-editor .cm-panels-top {
+    border-top: none;
+  }
+
+  .cm-editor .cm-panel {
+    padding: 0.5rem 1rem;
+  }
+
+  .cm-editor .cm-panel input,
+  .cm-editor .cm-panel select {
+    background: var(--theme-bg-primary);
+    color: var(--theme-text-primary);
+    border: 1px solid var(--theme-border);
+    border-radius: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+  }
+
+  .cm-editor .cm-panel input:focus,
+  .cm-editor .cm-panel select:focus {
+    outline: none;
+    border-color: var(--theme-accent);
+  }
+
+  .cm-editor .cm-panel button {
+    background: var(--theme-bg-hover);
+    color: var(--theme-text-primary);
+    border: 1px solid var(--theme-border);
+    border-radius: 0.25rem;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: background-color 0.15s;
+  }
+
+  .cm-editor .cm-panel button:hover {
+    background: var(--theme-accent);
+    color: var(--theme-accent-text);
+    border-color: var(--theme-accent);
+  }
+
+  .cm-editor .cm-panel label {
+    color: var(--theme-text-muted);
+    font-size: 0.75rem;
+    margin-left: 0.5rem;
+  }
+
+  /* Close button in panels */
+  .cm-editor .cm-panel button[name="close"] {
+    padding: 0.125rem 0.5rem;
+    font-size: 1rem;
+  }
+
+  /* === Typewriter Mode === */
+
+  .cm-editor.typewriter-mode .cm-scroller {
+    /* Padding is set dynamically by the typewriter plugin */
+  }
+
+  .cm-editor.typewriter-mode .cm-content {
+    /* Content styling in typewriter mode */
+  }
+
+  /* Body-level typewriter mode - centers editor on screen */
+  body.typewriter-mode .editor-wrapper {
+    /* Center the content wrapper */
+    justify-content: center;
+  }
+
+  body.typewriter-mode .editor-body {
+    /* Don't stretch to full width, let content determine width */
+    flex: 0 1 auto;
+    width: 100%;
+    max-width: calc(var(--editor-width, 72ch) + 4rem); /* Content width + padding */
+  }
+
+  body.typewriter-mode .cm-editor-container {
+    width: 100%;
+  }
+
+  body.typewriter-mode .cm-editor .cm-scroller {
+    /* Ensure scroller takes full width */
+    width: 100%;
+  }
+
+  body.typewriter-mode .cm-editor .cm-content {
+    /* In typewriter mode, content takes full width of container (already constrained by parent) */
+    max-width: 100%;
+    margin: 0;
+    padding: 1rem 2rem;
+  }
+
+  /* === Tooltips === */
+
+  .cm-editor .cm-tooltip {
+    background: var(--theme-bg-secondary);
+    color: var(--theme-text-primary);
+    border: 1px solid var(--theme-border);
+    border-radius: 0.25rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+
+  /* === Scrollbar Styling === */
+
+  .cm-editor .cm-scroller::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .cm-editor .cm-scroller::-webkit-scrollbar-track {
+    background: var(--theme-bg-primary);
+  }
+
+  .cm-editor .cm-scroller::-webkit-scrollbar-thumb {
+    background: var(--theme-border);
+    border-radius: 4px;
+  }
+
+  .cm-editor .cm-scroller::-webkit-scrollbar-thumb:hover {
+    background: var(--theme-text-faint);
+  }
+
+  /* Firefox scrollbar */
+  .cm-editor .cm-scroller {
+    scrollbar-width: thin;
+    scrollbar-color: var(--theme-border) var(--theme-bg-primary);
+  }
+
+  /* === Fold Gutter === */
+
+  .cm-editor .cm-foldGutter {
+    width: 1rem;
+  }
+
+  .cm-editor .cm-foldGutter .cm-gutterElement {
+    cursor: pointer;
+    color: var(--theme-text-faint);
+    padding: 0 0.25rem;
+  }
+
+  .cm-editor .cm-foldGutter .cm-gutterElement:hover {
+    color: var(--theme-text-muted);
   }
 }

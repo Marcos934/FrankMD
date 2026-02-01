@@ -24,6 +24,8 @@ export const DEFAULT_SHORTCUTS = {
   typewriterMode: { key: "\\", ctrl: true },
   textFormat:     { key: "m", ctrl: true },
   emojiPicker:    { key: "E", ctrl: true, shift: true },
+  increaseWidth:  { key: "+", ctrl: true, shift: true },  // Ctrl+Shift++ (increase editor width)
+  decreaseWidth:  { key: "_", ctrl: true, shift: true },  // Ctrl+Shift+- (decrease editor width)
   help:           { key: "F1" },
   closeDialogs:   { key: "Escape", preventDefault: false }
 }

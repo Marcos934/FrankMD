@@ -6,19 +6,22 @@ import { Application } from "@hotwired/stimulus"
 import TypewriterController from "../../../app/javascript/controllers/typewriter_controller.js"
 
 describe("TypewriterController", () => {
-  let application, controller, element
+  let application, controller, element, mockCodemirrorController
 
   beforeEach(() => {
+    // Create mock CodeMirror controller
+    mockCodemirrorController = {
+      setTypewriterMode: vi.fn(),
+      maintainTypewriterScroll: vi.fn(),
+      getTypewriterSyncData: vi.fn().mockReturnValue({ currentLine: 2, totalLines: 5 })
+    }
+
     document.body.innerHTML = `
       <div data-controller="typewriter" data-typewriter-enabled-value="false">
-        <textarea data-typewriter-target="textarea" style="height: 300px;">Line 1
-Line 2
-Line 3
-Line 4
-Line 5</textarea>
         <div data-typewriter-target="wrapper" class="editor-wrapper"></div>
         <div data-typewriter-target="body" class="editor-body"></div>
         <button data-typewriter-target="toggleButton" aria-pressed="false"></button>
+        <div data-controller="codemirror" data-typewriter-target="editor"></div>
       </div>
     `
 
@@ -29,6 +32,8 @@ Line 5</textarea>
     return new Promise((resolve) => {
       setTimeout(() => {
         controller = application.getControllerForElementAndIdentifier(element, "typewriter")
+        // Mock the getCodemirrorController method
+        controller.getCodemirrorController = vi.fn().mockReturnValue(mockCodemirrorController)
         resolve()
       }, 0)
     })
@@ -44,8 +49,9 @@ Line 5</textarea>
       expect(controller.enabledValue).toBe(false)
     })
 
-    it("applies initial mode", () => {
-      expect(controller.textareaTarget.classList.contains("typewriter-mode")).toBe(false)
+    it("applies initial mode on connect", () => {
+      // When disabled, wrapper should not have typewriter-centered class
+      expect(controller.wrapperTarget.classList.contains("typewriter-centered")).toBe(false)
     })
   })
 
@@ -72,31 +78,18 @@ Line 5</textarea>
       })
     })
 
-    it("calls maintainScroll when enabling", () => {
-      const maintainSpy = vi.spyOn(controller, "maintainScroll")
-
+    it("calls CodeMirror setTypewriterMode when toggling", () => {
       controller.toggle() // Enable
 
-      expect(maintainSpy).toHaveBeenCalled()
+      expect(mockCodemirrorController.setTypewriterMode).toHaveBeenCalledWith(true)
+
+      controller.toggle() // Disable
+
+      expect(mockCodemirrorController.setTypewriterMode).toHaveBeenCalledWith(false)
     })
   })
 
   describe("applyMode()", () => {
-    it("adds typewriter-mode class to textarea when enabled", () => {
-      controller.enabledValue = true
-      controller.applyMode()
-
-      expect(controller.textareaTarget.classList.contains("typewriter-mode")).toBe(true)
-    })
-
-    it("removes typewriter-mode class when disabled", () => {
-      controller.textareaTarget.classList.add("typewriter-mode")
-      controller.enabledValue = false
-      controller.applyMode()
-
-      expect(controller.textareaTarget.classList.contains("typewriter-mode")).toBe(false)
-    })
-
     it("adds typewriter-centered class to wrapper when enabled", () => {
       controller.enabledValue = true
       controller.applyMode()
@@ -104,11 +97,27 @@ Line 5</textarea>
       expect(controller.wrapperTarget.classList.contains("typewriter-centered")).toBe(true)
     })
 
+    it("removes typewriter-centered class from wrapper when disabled", () => {
+      controller.wrapperTarget.classList.add("typewriter-centered")
+      controller.enabledValue = false
+      controller.applyMode()
+
+      expect(controller.wrapperTarget.classList.contains("typewriter-centered")).toBe(false)
+    })
+
     it("adds typewriter-centered class to body when enabled", () => {
       controller.enabledValue = true
       controller.applyMode()
 
       expect(controller.bodyTarget.classList.contains("typewriter-centered")).toBe(true)
+    })
+
+    it("removes typewriter-centered class from body when disabled", () => {
+      controller.bodyTarget.classList.add("typewriter-centered")
+      controller.enabledValue = false
+      controller.applyMode()
+
+      expect(controller.bodyTarget.classList.contains("typewriter-centered")).toBe(false)
     })
 
     it("updates toggle button aria-pressed", () => {
@@ -129,64 +138,56 @@ Line 5</textarea>
 
       expect(controller.toggleButtonTarget.classList.contains("bg-[var(--theme-bg-hover)]")).toBe(true)
     })
+
+    it("removes bg-hover class from button when disabled", () => {
+      controller.toggleButtonTarget.classList.add("bg-[var(--theme-bg-hover)]")
+      controller.enabledValue = false
+      controller.applyMode()
+
+      expect(controller.toggleButtonTarget.classList.contains("bg-[var(--theme-bg-hover)]")).toBe(false)
+    })
   })
 
   describe("maintainScroll()", () => {
     it("does nothing when not enabled", () => {
       controller.enabledValue = false
-      const getCursorSpy = vi.spyOn(controller, "getCursorYPosition")
 
       controller.maintainScroll()
 
-      expect(getCursorSpy).not.toHaveBeenCalled()
+      expect(mockCodemirrorController.maintainTypewriterScroll).not.toHaveBeenCalled()
     })
 
-    it("calculates scroll when enabled", () => {
-      vi.useFakeTimers()
+    it("calls CodeMirror maintainTypewriterScroll when enabled", () => {
       controller.enabledValue = true
-      controller.textareaTarget.selectionStart = 10
-
-      const getCursorSpy = vi.spyOn(controller, "getCursorYPosition").mockReturnValue(50)
 
       controller.maintainScroll()
 
-      expect(getCursorSpy).toHaveBeenCalled()
-
-      vi.useRealTimers()
+      expect(mockCodemirrorController.maintainTypewriterScroll).toHaveBeenCalled()
     })
-  })
 
-  describe("getCursorYPosition()", () => {
-    it("returns a number representing Y position", () => {
-      const textarea = controller.textareaTarget
-      textarea.value = "Test content"
-      textarea.selectionStart = 5
+    it("handles missing CodeMirror controller gracefully", () => {
+      controller.getCodemirrorController = vi.fn().mockReturnValue(null)
+      controller.enabledValue = true
 
-      const y = controller.getCursorYPosition(textarea, 5)
-
-      expect(typeof y).toBe("number")
+      // Should not throw
+      expect(() => controller.maintainScroll()).not.toThrow()
     })
   })
 
   describe("getSyncData()", () => {
-    it("returns current line and total lines", () => {
-      controller.textareaTarget.value = "Line 1\nLine 2\nLine 3"
-      controller.textareaTarget.selectionStart = 10 // Middle of Line 2
+    it("returns sync data from CodeMirror controller", () => {
+      const data = controller.getSyncData()
+
+      expect(data).toEqual({ currentLine: 2, totalLines: 5 })
+      expect(mockCodemirrorController.getTypewriterSyncData).toHaveBeenCalled()
+    })
+
+    it("returns null if no CodeMirror controller available", () => {
+      controller.getCodemirrorController = vi.fn().mockReturnValue(null)
 
       const data = controller.getSyncData()
 
-      expect(data).toHaveProperty("currentLine")
-      expect(data).toHaveProperty("totalLines")
-      expect(data.totalLines).toBe(3)
-    })
-
-    it("returns null if no textarea target", () => {
-      // Remove textarea target
-      controller.textareaTarget.remove()
-
-      // Need to access the target check directly
-      const hasTarget = controller.hasTextareaTarget
-      expect(hasTarget).toBe(false)
+      expect(data).toBeNull()
     })
   })
 
@@ -208,6 +209,41 @@ Line 5</textarea>
 
       expect(controller.enabledValue).toBe(true)
       expect(applySpy).toHaveBeenCalled()
+    })
+
+    it("syncs with CodeMirror controller", () => {
+      controller.setEnabled(true)
+
+      expect(mockCodemirrorController.setTypewriterMode).toHaveBeenCalledWith(true)
+
+      controller.setEnabled(false)
+
+      expect(mockCodemirrorController.setTypewriterMode).toHaveBeenCalledWith(false)
+    })
+  })
+
+  describe("getCodemirrorController()", () => {
+    it("finds CodeMirror controller by data-controller attribute", () => {
+      // Restore original implementation for this test
+      controller.getCodemirrorController = TypewriterController.prototype.getCodemirrorController.bind(controller)
+
+      // Mock the application's getControllerForElementAndIdentifier
+      const mockController = { test: true }
+      controller.application.getControllerForElementAndIdentifier = vi.fn().mockReturnValue(mockController)
+
+      controller.getCodemirrorController()
+
+      expect(controller.application.getControllerForElementAndIdentifier).toHaveBeenCalled()
+    })
+
+    it("returns null if no CodeMirror element found", () => {
+      // Remove the codemirror element
+      document.querySelector('[data-controller="codemirror"]').remove()
+
+      // Restore original implementation
+      controller.getCodemirrorController = TypewriterController.prototype.getCodemirrorController.bind(controller)
+
+      expect(controller.getCodemirrorController()).toBeNull()
     })
   })
 })

@@ -616,4 +616,108 @@ describe("TextFormatController", () => {
       expect(textarea.value).toBe("some [[link](url)](url) text")
     })
   })
+
+  describe("openAtPosition()", () => {
+    let textarea
+
+    beforeEach(() => {
+      textarea = document.createElement("textarea")
+      textarea.value = "Hello World"
+      document.body.appendChild(textarea)
+    })
+
+    afterEach(() => {
+      document.body.removeChild(textarea)
+    })
+
+    it("opens menu when text is selected", () => {
+      textarea.setSelectionRange(0, 5) // Select "Hello"
+
+      controller.openAtPosition(textarea, 100, 200)
+
+      expect(controller.menuTarget.classList.contains("hidden")).toBe(false)
+      expect(controller.selectionData).toEqual({
+        start: 0,
+        end: 5,
+        text: "Hello"
+      })
+    })
+
+    it("does not open menu when no text is selected", () => {
+      textarea.setSelectionRange(3, 3) // Cursor only, no selection
+
+      controller.openAtPosition(textarea, 100, 200)
+
+      expect(controller.menuTarget.classList.contains("hidden")).toBe(true)
+    })
+
+    it("does not open menu when selection is only whitespace", () => {
+      textarea.value = "Hello   World"
+      textarea.setSelectionRange(5, 8) // Select "   " (spaces)
+
+      controller.openAtPosition(textarea, 100, 200)
+
+      expect(controller.menuTarget.classList.contains("hidden")).toBe(true)
+    })
+
+    it("positions menu at specified coordinates", () => {
+      textarea.setSelectionRange(0, 5)
+
+      controller.openAtPosition(textarea, 150, 250)
+
+      expect(controller.menuTarget.style.left).toBe("150px")
+      expect(controller.menuTarget.style.top).toBe("250px")
+    })
+  })
+
+  describe("openAtCursor()", () => {
+    let textarea
+
+    beforeEach(() => {
+      textarea = document.createElement("textarea")
+      textarea.value = "Hello World"
+      document.body.appendChild(textarea)
+      // Mock getBoundingClientRect for position calculation
+      textarea.getBoundingClientRect = vi.fn(() => ({
+        top: 100,
+        left: 50,
+        width: 300,
+        height: 100
+      }))
+    })
+
+    afterEach(() => {
+      document.body.removeChild(textarea)
+    })
+
+    it("opens menu when text is selected", () => {
+      textarea.setSelectionRange(0, 5) // Select "Hello"
+
+      controller.openAtCursor(textarea)
+
+      expect(controller.menuTarget.classList.contains("hidden")).toBe(false)
+      expect(controller.selectionData).toEqual({
+        start: 0,
+        end: 5,
+        text: "Hello"
+      })
+    })
+
+    it("does not open menu when no text is selected", () => {
+      textarea.setSelectionRange(3, 3) // Cursor only
+
+      controller.openAtCursor(textarea)
+
+      expect(controller.menuTarget.classList.contains("hidden")).toBe(true)
+    })
+
+    it("does not open menu when selection is only whitespace", () => {
+      textarea.value = "Hello   World"
+      textarea.setSelectionRange(5, 8) // Select spaces
+
+      controller.openAtCursor(textarea)
+
+      expect(controller.menuTarget.classList.contains("hidden")).toBe(true)
+    })
+  })
 })

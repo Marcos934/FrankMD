@@ -1,6 +1,6 @@
 import { Controller } from "@hotwired/stimulus"
-import { marked } from "marked"
 import { calculateLineFromScroll } from "lib/scroll_utils"
+import { parseWithLineNumbers, findElementByLine, findLineAtScroll } from "lib/markdown_line_mapper"
 
 // Preview Controller
 // Handles markdown preview panel rendering, zoom, and scroll sync
@@ -11,8 +11,9 @@ import { calculateLineFromScroll } from "lib/scroll_utils"
 // Strip frontmatter (YAML or TOML) from markdown content
 // YAML: starts with --- and ends with ---
 // TOML: starts with +++ and ends with +++
+// Returns { content, frontmatterLines } where frontmatterLines is the count of lines stripped
 function stripFrontmatter(content) {
-  if (!content) return content
+  if (!content) return { content, frontmatterLines: 0 }
 
   // Check for YAML frontmatter (---)
   if (content.startsWith("---")) {
@@ -21,10 +22,16 @@ function stripFrontmatter(content) {
       // Find the end of the closing --- line
       const afterFrontmatter = content.indexOf("\n", endMatch + 4)
       if (afterFrontmatter !== -1) {
-        return content.slice(afterFrontmatter + 1).trimStart()
+        const frontmatter = content.slice(0, afterFrontmatter + 1)
+        const frontmatterLines = frontmatter.split("\n").length
+        return {
+          content: content.slice(afterFrontmatter + 1).trimStart(),
+          frontmatterLines
+        }
       }
       // Closing --- is at end of file
-      return ""
+      const frontmatterLines = content.split("\n").length
+      return { content: "", frontmatterLines }
     }
   }
 
@@ -34,13 +41,19 @@ function stripFrontmatter(content) {
     if (endMatch !== -1) {
       const afterFrontmatter = content.indexOf("\n", endMatch + 4)
       if (afterFrontmatter !== -1) {
-        return content.slice(afterFrontmatter + 1).trimStart()
+        const frontmatter = content.slice(0, afterFrontmatter + 1)
+        const frontmatterLines = frontmatter.split("\n").length
+        return {
+          content: content.slice(afterFrontmatter + 1).trimStart(),
+          frontmatterLines
+        }
       }
-      return ""
+      const frontmatterLines = content.split("\n").length
+      return { content: "", frontmatterLines }
     }
   }
 
-  return content
+  return { content, frontmatterLines: 0 }
 }
 
 export default class extends Controller {
@@ -110,7 +123,6 @@ export default class extends Controller {
   onPreviewScroll() {
     if (!this.syncScrollEnabledValue) return
     if (!this.isVisible) return
-    if (!this.editorTextarea) return
 
     // Don't sync back if this scroll was caused by editor sync
     if (this._scrollSource === "editor") return
@@ -118,10 +130,17 @@ export default class extends Controller {
     // Mark that preview initiated this scroll
     this._markScrollFromPreview()
 
+    // Try to find the source line at current scroll position (more accurate)
+    const sourceLine = this.hasContentTarget
+      ? findLineAtScroll(this.contentTarget, this.contentTarget.scrollTop)
+      : null
+
     // Dispatch event to notify app controller to sync editor
     this.dispatch("scroll", {
       detail: {
         scrollRatio: this._getPreviewScrollRatio(),
+        sourceLine: sourceLine,
+        totalLines: this.totalSourceLines || 0,
         typewriterMode: this.typewriterModeValue
       }
     })
@@ -184,8 +203,16 @@ export default class extends Controller {
     if (!this.hasContentTarget) return
 
     // Strip frontmatter (YAML/TOML) before rendering
-    const content = stripFrontmatter(markdownContent || "")
-    this.contentTarget.innerHTML = marked.parse(content)
+    const { content, frontmatterLines } = stripFrontmatter(markdownContent || "")
+
+    // Store frontmatter offset for line-based sync
+    this.frontmatterLines = frontmatterLines
+
+    // Parse with line numbers for accurate scroll sync
+    this.contentTarget.innerHTML = parseWithLineNumbers(content, frontmatterLines)
+
+    // Store total lines for ratio fallback
+    this.totalSourceLines = (markdownContent || "").split("\n").length
   }
 
   // Update preview with content and scroll sync
@@ -308,6 +335,7 @@ export default class extends Controller {
   }
 
   // Sync scroll based on ratio (for normal scrolling)
+  // Uses line-based positioning when available for better accuracy with images/embeds
   syncScrollRatio(scrollRatio) {
     if (!this.syncScrollEnabledValue) return
     if (!this.isVisible) return
@@ -326,8 +354,35 @@ export default class extends Controller {
 
     this.syncScrollTimeout = requestAnimationFrame(() => {
       const preview = this.contentTarget
-      const previewScrollHeight = preview.scrollHeight - preview.clientHeight
 
+      // Try line-based sync first (more accurate with images/embeds)
+      if (this.totalSourceLines > 1) {
+        // Convert scroll ratio to approximate source line
+        const targetLine = Math.round(scrollRatio * this.totalSourceLines) + 1
+
+        // Find the closest element with that line number
+        const targetElement = findElementByLine(preview, targetLine)
+
+        if (targetElement) {
+          // Calculate scroll position to show target element at top
+          const elementTop = targetElement.offsetTop
+          const previewScrollHeight = preview.scrollHeight - preview.clientHeight
+
+          if (previewScrollHeight > 0) {
+            // Clamp to valid scroll range
+            const targetScroll = Math.max(0, Math.min(elementTop, previewScrollHeight))
+
+            // Only scroll if change is significant (prevents jitter)
+            if (Math.abs(preview.scrollTop - targetScroll) > 5) {
+              preview.scrollTop = targetScroll
+            }
+          }
+          return
+        }
+      }
+
+      // Fallback to ratio-based sync
+      const previewScrollHeight = preview.scrollHeight - preview.clientHeight
       if (previewScrollHeight > 0) {
         preview.scrollTop = scrollRatio * previewScrollHeight
       }

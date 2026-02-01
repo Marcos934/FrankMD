@@ -152,8 +152,11 @@ describe("PreviewController", () => {
     it("renders markdown content", () => {
       controller.render("# Hello\n\nWorld")
 
-      expect(controller.contentTarget.innerHTML).toContain("<h1>Hello</h1>")
-      expect(controller.contentTarget.innerHTML).toContain("<p>World</p>")
+      // Content now includes data-source-line attributes for scroll sync
+      expect(controller.contentTarget.innerHTML).toContain("<h1")
+      expect(controller.contentTarget.innerHTML).toContain("Hello</h1>")
+      expect(controller.contentTarget.innerHTML).toContain("<p")
+      expect(controller.contentTarget.innerHTML).toContain("World</p>")
     })
 
     it("does nothing when hidden", () => {
@@ -418,7 +421,7 @@ describe("PreviewController", () => {
     })
 
     describe("onPreviewScroll()", () => {
-      it("dispatches scroll event with scroll ratio", () => {
+      it("dispatches scroll event with scroll ratio and line info", () => {
         const dispatchSpy = vi.spyOn(controller, "dispatch")
 
         // Mock scroll position
@@ -431,6 +434,8 @@ describe("PreviewController", () => {
         expect(dispatchSpy).toHaveBeenCalledWith("scroll", {
           detail: {
             scrollRatio: 0.5,
+            sourceLine: null, // No elements with data-source-line in test
+            totalLines: 0,    // totalSourceLines not set
             typewriterMode: false
           }
         })

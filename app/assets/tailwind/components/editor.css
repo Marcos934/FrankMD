@@ -23,34 +23,6 @@
     }
   }
 
-  .editor-textarea {
-    max-width: 100%;
-    min-width: 0;
-  }
-
-  .editor-wrapper .editor-textarea {
-    max-width: var(--editor-width, 72ch);
-    padding-left: 2rem;
-    padding-right: 2rem;
-  }
-
-  .editor-line-number-gutter {
-    height: 100%;
-    padding: 1rem 0.5rem;
-    border-right: 1px solid var(--theme-border);
-    background: var(--theme-bg-secondary);
-    overflow: hidden;
-    user-select: none;
-  }
-
-  .editor-line-numbers {
-    margin: 0;
-    line-height: inherit;
-    font-family: inherit;
-    white-space: pre;
-    text-align: right;
-  }
-
   .editor-body {
     display: flex;
     justify-content: flex-start;
@@ -58,15 +30,6 @@
 
   .editor-body.typewriter-centered {
     justify-content: center;
-  }
-
-  .editor-body.typewriter-centered .editor-highlight-wrapper {
-    max-width: var(--editor-width, 72ch);
-  }
-
-  /* Typewriter mode - adds bottom padding to keep cursor in middle area */
-  .editor-textarea.typewriter-mode {
-    padding-bottom: 50vh !important; /* Half viewport height of empty space at bottom */
   }
 
   /* Preview also needs padding in typewriter mode to allow centering last content */

@@ -6,13 +6,7 @@ import { allExtensions } from "lib/marked_extensions"
 import { encodePath } from "lib/url_utils"
 import { flattenTree } from "lib/tree_utils"
 import { LINE_NUMBER_MODES, normalizeLineNumberMode } from "lib/line_numbers"
-import { parseIndentSetting, indentLines, unindentLines } from "lib/indent_utils"
-import {
-  getLineBoundaries,
-  getCursorInfo as getTextCursorInfo,
-  getPositionForLine
-} from "lib/text_editor_utils"
-import { calculateScrollForLine } from "lib/scroll_utils"
+import { parseIndentSetting } from "lib/indent_utils"
 import {
   DEFAULT_SHORTCUTS,
   createKeyHandler,
@@ -70,7 +64,9 @@ export default class extends Controller {
     const settings = this.hasConfigValue ? (this.configValue.settings || {}) : {}
     this.currentFont = settings.editor_font || "cascadia-code"
     this.currentFontSize = parseInt(settings.editor_font_size) || 14
-    this.editorWidth = Math.max(72, parseInt(settings.editor_width) || 72)
+    // Editor width with sane bounds (40-200 characters)
+    const initWidth = parseInt(settings.editor_width) || 72
+    this.editorWidth = Math.max(40, Math.min(200, initWidth))
 
     // Preview zoom (tracked for config saving, actual state in preview controller)
     this.previewZoom = parseInt(settings.preview_zoom) || 100
@@ -85,7 +81,7 @@ export default class extends Controller {
     // Editor indent setting: 0 = tab, 1-6 = spaces (default 2)
     this.editorIndent = parseIndentSetting(settings.editor_indent)
 
-    // Line number mode - tracked for config reload (actual state in line-numbers controller)
+    // Line number mode - tracked for config reload (actual state in CodeMirror)
     this.lineNumberMode = normalizeLineNumberMode(
       settings.editor_line_numbers,
       LINE_NUMBER_MODES.OFF
@@ -162,14 +158,6 @@ export default class extends Controller {
     return null
   }
 
-  getLineNumbersController() {
-    const element = document.querySelector('[data-controller~="line-numbers"]')
-    if (element) {
-      return this.application.getControllerForElementAndIdentifier(element, "line-numbers")
-    }
-    return null
-  }
-
   getTypewriterController() {
     const element = document.querySelector('[data-controller~="typewriter"]')
     if (element) {
@@ -178,10 +166,10 @@ export default class extends Controller {
     return null
   }
 
-  getSyntaxHighlightController() {
-    const element = document.querySelector('[data-controller~="syntax-highlight"]')
+  getCodemirrorController() {
+    const element = document.querySelector('[data-controller~="codemirror"]')
     if (element) {
-      return this.application.getControllerForElementAndIdentifier(element, "syntax-highlight")
+      return this.application.getControllerForElementAndIdentifier(element, "codemirror")
     }
     return null
   }
@@ -500,8 +488,16 @@ export default class extends Controller {
     this.currentFileType = fileType
     this.editorPlaceholderTarget.classList.add("hidden")
     this.editorTarget.classList.remove("hidden")
-    this.textareaTarget.value = content
-    this.textareaTarget.focus()
+
+    // Set content via CodeMirror controller
+    const codemirrorController = this.getCodemirrorController()
+    if (codemirrorController) {
+      codemirrorController.setValue(content)
+      codemirrorController.focus()
+    } else {
+      // Fallback to hidden textarea
+      this.textareaTarget.value = content
+    }
 
     // Only show toolbar and preview for markdown files
     const isMarkdown = fileType === "markdown"
@@ -523,8 +519,8 @@ export default class extends Controller {
     // Show stats panel and update stats
     this.showStatsPanel()
     this.updateStats()
-    this.scheduleLineNumberUpdate()
-    this.scheduleSyntaxHighlightUpdate()
+    // Apply editor settings (font, size, line numbers)
+    this.applyEditorSettings()
   }
 
   // Check if current file is markdown
@@ -541,8 +537,12 @@ export default class extends Controller {
   }
 
   onTextareaInput() {
-    this.scheduleLineNumberUpdate()
-    this.scheduleSyntaxHighlightUpdate()
+    // Legacy method - CodeMirror now handles input via onEditorChange
+    this.onEditorChange({ detail: { docChanged: true } })
+  }
+
+  // Handle CodeMirror editor change events
+  onEditorChange(event) {
     this.scheduleAutoSave()
     this.scheduleStatsUpdate()
 
@@ -554,37 +554,41 @@ export default class extends Controller {
     }
   }
 
-  // Dispatch an input event to trigger all listeners after programmatic value changes
-  // This is the standard pattern - setting textarea.value doesn't fire input events
-  triggerTextareaInput() {
-    if (this.hasTextareaTarget) {
-      this.textareaTarget.dispatchEvent(new Event("input", { bubbles: true }))
-    }
-  }
-
-  onTextareaSelectionChange() {
-    this.scheduleLineNumberUpdate()
+  // Handle CodeMirror selection change events
+  onEditorSelectionChange(event) {
     this.updateLinePosition()
   }
 
-  onTextareaScroll() {
-    this.syncLineNumberScroll()
-
+  // Handle CodeMirror scroll events
+  onEditorScroll(event) {
     // Don't sync preview if this scroll was caused by preview sync (prevents feedback loop)
     if (this._scrollSource === "preview") return
 
     // Mark that editor initiated this scroll
     this._markScrollFromEditor()
 
-    // Sync preview scroll
+    // Sync preview scroll - use scroll ratio for both normal and typewriter modes
+    // (cursor-based sync in typewriter mode happens on selection change)
     const previewController = this.getPreviewController()
-    if (previewController && previewController.isVisible && this.hasTextareaTarget) {
-      if (this.typewriterModeEnabled) {
-        previewController.syncScrollTypewriter(this.textareaTarget)
-      } else {
-        previewController.syncFromEditorScroll(this.textareaTarget)
-      }
+    if (previewController && previewController.isVisible) {
+      const scrollRatio = event.detail?.scrollRatio || 0
+      previewController.syncScrollRatio(scrollRatio)
     }
+  }
+
+  // Dispatch an input event to trigger all listeners after programmatic value changes
+  // Note: CodeMirror handles this automatically, but kept for backward compatibility
+  triggerTextareaInput() {
+    this.onEditorChange({ detail: { docChanged: true } })
+  }
+
+  onTextareaSelectionChange() {
+    // Legacy method - CodeMirror now handles selection via onEditorSelectionChange
+    this.updateLinePosition()
+  }
+
+  onTextareaScroll() {
+    // Legacy method - CodeMirror now handles scroll via onEditorScroll
   }
 
   // Mark that scroll was initiated by editor (prevents reverse sync)
@@ -614,24 +618,25 @@ export default class extends Controller {
   updatePreviewWithSync() {
     const previewController = this.getPreviewController()
     if (!previewController || !previewController.isVisible) return
-    if (!this.hasTextareaTarget) return
 
-    const content = this.textareaTarget.value
-    const cursorPos = this.textareaTarget.selectionStart
+    const codemirrorController = this.getCodemirrorController()
+    const content = codemirrorController ? codemirrorController.getValue() : (this.hasTextareaTarget ? this.textareaTarget.value : "")
+    const cursorInfo = codemirrorController ? codemirrorController.getCursorPosition() : { offset: 0 }
 
     previewController.updateWithSync(content, {
-      cursorPos,
+      cursorPos: cursorInfo.offset,
       typewriterMode: this.typewriterModeEnabled
     })
   }
 
   // Check if cursor is in a markdown table
   checkTableAtCursor() {
-    if (!this.hasTextareaTarget) return
+    const codemirrorController = this.getCodemirrorController()
+    if (!codemirrorController) return
 
-    const text = this.textareaTarget.value
-    const cursorPos = this.textareaTarget.selectionStart
-    const tableInfo = findTableAtPosition(text, cursorPos)
+    const text = codemirrorController.getValue()
+    const cursorInfo = codemirrorController.getCursorPosition()
+    const tableInfo = findTableAtPosition(text, cursorInfo.offset)
 
     if (tableInfo) {
       this.tableHintTarget.classList.remove("hidden")
@@ -661,14 +666,16 @@ export default class extends Controller {
       return
     }
 
-    if (!this.currentFile || !this.hasTextareaTarget) return
+    if (!this.currentFile) return
 
     if (this.saveTimeout) {
       clearTimeout(this.saveTimeout)
       this.saveTimeout = null
     }
 
-    const content = this.textareaTarget.value
+    // Get content from CodeMirror or fallback to textarea
+    const codemirrorController = this.getCodemirrorController()
+    const content = codemirrorController ? codemirrorController.getValue() : this.textareaTarget.value
     const isConfigFile = this.currentFile === ".fed"
 
     try {
@@ -753,7 +760,8 @@ export default class extends Controller {
 
       this.currentFont = settings.editor_font || "cascadia-code"
       this.currentFontSize = parseInt(settings.editor_font_size) || 14
-      this.editorWidth = Math.max(72, parseInt(settings.editor_width) || 72)
+      const reloadWidth = parseInt(settings.editor_width) || 72
+      this.editorWidth = Math.max(40, Math.min(200, reloadWidth))
       this.previewZoom = parseInt(settings.preview_zoom) || 100
       this.editorIndent = parseIndentSetting(settings.editor_indent)
       this.lineNumberMode = normalizeLineNumberMode(
@@ -772,9 +780,9 @@ export default class extends Controller {
         }
       }
       if (this.lineNumberMode !== oldLineNumberMode) {
-        const lineNumbersController = this.getLineNumbersController()
-        if (lineNumbersController) {
-          lineNumbersController.setMode(this.lineNumberMode)
+        const codemirrorController = this.getCodemirrorController()
+        if (codemirrorController) {
+          codemirrorController.setLineNumberMode(this.lineNumberMode)
         }
       }
 
@@ -817,49 +825,25 @@ export default class extends Controller {
   updatePreview() {
     const previewController = this.getPreviewController()
     if (!previewController || !previewController.isVisible) return
-    if (!this.hasTextareaTarget) return
 
-    const content = this.textareaTarget.value
+    const codemirrorController = this.getCodemirrorController()
+    const content = codemirrorController ? codemirrorController.getValue() : (this.hasTextareaTarget ? this.textareaTarget.value : "")
 
     // Build scroll data for preview controller
     const scrollData = { typewriterMode: this.typewriterModeEnabled }
 
-    if (this.typewriterModeEnabled) {
-      const textBeforeCursor = content.substring(0, this.textareaTarget.selectionStart)
-      scrollData.currentLine = textBeforeCursor.split("\n").length
-      scrollData.totalLines = content.split("\n").length
+    if (this.typewriterModeEnabled && codemirrorController) {
+      const cursorInfo = codemirrorController.getCursorInfo()
+      scrollData.currentLine = cursorInfo.currentLine
+      scrollData.totalLines = cursorInfo.totalLines
     }
 
     previewController.update(content, scrollData)
   }
 
   setupSyncScroll() {
-    if (!this.hasTextareaTarget) return
-
-    const previewController = this.getPreviewController()
-    if (previewController) {
-      previewController.setupEditorSync(this.textareaTarget)
-    }
-
-    // Sync on cursor position changes (selection change)
-    this.textareaTarget.addEventListener("click", () => {
-      if (this.typewriterModeEnabled) {
-        this.maintainTypewriterScroll()
-      } else {
-        this.syncPreviewScrollToCursor()
-      }
-    })
-
-    this.textareaTarget.addEventListener("keyup", (event) => {
-      // Sync on arrow keys, page up/down, home/end
-      if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(event.key)) {
-        if (this.typewriterModeEnabled) {
-          this.maintainTypewriterScroll()
-        } else {
-          this.syncPreviewScrollToCursor()
-        }
-      }
-    })
+    // CodeMirror handles scroll events via data-action bindings
+    // The onEditorScroll method handles preview synchronization
   }
 
   syncPreviewScrollToCursor() {
@@ -904,23 +888,20 @@ export default class extends Controller {
   handleTableInsert(event) {
     const { markdown, editMode, startPos, endPos } = event.detail
 
-    if (!this.hasTextareaTarget || !markdown) return
+    if (!markdown) return
 
-    const textarea = this.textareaTarget
-    const text = textarea.value
+    const codemirrorController = this.getCodemirrorController()
+    if (!codemirrorController) return
+
+    const text = codemirrorController.getValue()
 
     if (editMode) {
       // Replace existing table
-      const before = text.substring(0, startPos)
-      const after = text.substring(endPos)
-      textarea.value = before + markdown + after
-
-      // Position cursor after table
-      const newPos = startPos + markdown.length
-      textarea.setSelectionRange(newPos, newPos)
+      codemirrorController.replaceRange(markdown, startPos, endPos)
+      codemirrorController.setSelection(startPos + markdown.length, startPos + markdown.length)
     } else {
       // Insert at cursor
-      const cursorPos = textarea.selectionStart
+      const cursorPos = codemirrorController.getCursorPosition().offset
       const before = text.substring(0, cursorPos)
       const after = text.substring(cursorPos)
 
@@ -928,43 +909,37 @@ export default class extends Controller {
       const prefix = before.length > 0 && !before.endsWith("\n\n") ? (before.endsWith("\n") ? "\n" : "\n\n") : ""
       const suffix = after.length > 0 && !after.startsWith("\n\n") ? (after.startsWith("\n") ? "\n" : "\n\n") : ""
 
-      textarea.value = before + prefix + markdown + suffix + after
-
-      // Position cursor after table
-      const newPos = before.length + prefix.length + markdown.length
-      textarea.setSelectionRange(newPos, newPos)
+      const insert = prefix + markdown + suffix
+      codemirrorController.insertAt(cursorPos, insert)
+      codemirrorController.setSelection(cursorPos + insert.length, cursorPos + insert.length)
     }
 
-    textarea.focus()
-    this.triggerTextareaInput()
+    codemirrorController.focus()
+    this.onEditorChange({ detail: { docChanged: true } })
   }
 
   // === Image Picker Event Handler ===
   onImageSelected(event) {
     const { markdown } = event.detail
-    if (!markdown || !this.hasTextareaTarget) return
+    if (!markdown) return
 
-    const textarea = this.textareaTarget
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const text = textarea.value
+    const codemirrorController = this.getCodemirrorController()
+    if (!codemirrorController) return
 
-    // Insert markdown at cursor position
-    const before = text.substring(0, start)
-    const after = text.substring(end)
+    const { from, to } = codemirrorController.getSelection()
+    const text = codemirrorController.getValue()
+    const before = text.substring(0, from)
+    const after = text.substring(to)
 
     // Add newlines if needed
     const needsNewlineBefore = before.length > 0 && !before.endsWith("\n")
     const needsNewlineAfter = after.length > 0 && !after.startsWith("\n")
 
     const insert = (needsNewlineBefore ? "\n" : "") + markdown + (needsNewlineAfter ? "\n" : "")
-    textarea.value = before + insert + after
-
-    // Position cursor after inserted markdown
-    const newPosition = start + insert.length
-    textarea.setSelectionRange(newPosition, newPosition)
-    textarea.focus()
-    this.triggerTextareaInput()
+    codemirrorController.replaceRange(insert, from, to)
+    codemirrorController.setSelection(from + insert.length, from + insert.length)
+    codemirrorController.focus()
+    this.onEditorChange({ detail: { docChanged: true } })
   }
 
   // Open image picker dialog (delegates to image-picker controller)
@@ -1014,60 +989,90 @@ export default class extends Controller {
 
   applyEditorSettings() {
     const font = this.editorFonts.find(f => f.id === this.currentFont)
-    if (font && this.hasTextareaTarget) {
-      this.textareaTarget.style.fontFamily = font.family
-      this.textareaTarget.style.fontSize = `${this.currentFontSize}px`
+    const codemirrorController = this.getCodemirrorController()
+
+    if (codemirrorController && font) {
+      codemirrorController.setFontFamily(font.family)
+      codemirrorController.setFontSize(this.currentFontSize)
+      codemirrorController.setLineNumberMode(this.lineNumberMode)
     }
+
     // Apply editor width as CSS custom property
     document.documentElement.style.setProperty("--editor-width", `${this.editorWidth}ch`)
-    this.scheduleLineNumberUpdate()
   }
 
-  // === Line Numbers - Delegates to line_numbers_controller ===
+  // === Editor Width Adjustment ===
+
+  // Editor width bounds (in characters)
+  static MIN_EDITOR_WIDTH = 40
+  static MAX_EDITOR_WIDTH = 200
+  static EDITOR_WIDTH_STEP = 8 // Change by 8 characters per step
+
+  increaseEditorWidth() {
+    const maxWidth = this.constructor.MAX_EDITOR_WIDTH
+    const step = this.constructor.EDITOR_WIDTH_STEP
+
+    if (this.editorWidth >= maxWidth) {
+      this.showTemporaryMessage(`Maximum width (${maxWidth}ch)`)
+      return
+    }
+
+    this.editorWidth = Math.min(this.editorWidth + step, maxWidth)
+    this.applyEditorWidth()
+    this.saveConfig({ editor_width: this.editorWidth })
+    this.showTemporaryMessage(`Editor width: ${this.editorWidth}ch`)
+  }
+
+  decreaseEditorWidth() {
+    const minWidth = this.constructor.MIN_EDITOR_WIDTH
+    const step = this.constructor.EDITOR_WIDTH_STEP
+
+    if (this.editorWidth <= minWidth) {
+      this.showTemporaryMessage(`Minimum width (${minWidth}ch)`)
+      return
+    }
+
+    this.editorWidth = Math.max(this.editorWidth - step, minWidth)
+    this.applyEditorWidth()
+    this.saveConfig({ editor_width: this.editorWidth })
+    this.showTemporaryMessage(`Editor width: ${this.editorWidth}ch`)
+  }
+
+  applyEditorWidth() {
+    document.documentElement.style.setProperty("--editor-width", `${this.editorWidth}ch`)
+  }
+
+  // === Line Numbers - Now handled by CodeMirror ===
 
   initializeLineNumbers() {
-    const lineNumbersController = this.getLineNumbersController()
-    if (lineNumbersController) {
-      lineNumbersController.setMode(this.lineNumberMode)
+    const codemirrorController = this.getCodemirrorController()
+    if (codemirrorController) {
+      codemirrorController.setLineNumberMode(this.lineNumberMode)
     }
   }
 
   scheduleLineNumberUpdate() {
-    const lineNumbersController = this.getLineNumbersController()
-    if (lineNumbersController) {
-      lineNumbersController.scheduleUpdate()
-    }
+    // CodeMirror handles line number updates automatically
   }
 
   syncLineNumberScroll() {
-    const lineNumbersController = this.getLineNumbersController()
-    if (lineNumbersController) {
-      lineNumbersController.syncScroll()
-    }
+    // CodeMirror handles line number scroll automatically
   }
 
-  // === Syntax Highlighting ===
+  // === Syntax Highlighting - Now handled by CodeMirror ===
 
   scheduleSyntaxHighlightUpdate() {
-    const syntaxHighlightController = this.getSyntaxHighlightController()
-    if (syntaxHighlightController) {
-      syntaxHighlightController.scheduleUpdate()
-    }
+    // CodeMirror handles syntax highlighting automatically
   }
 
   toggleLineNumberMode() {
-    const lineNumbersController = this.getLineNumbersController()
-    if (lineNumbersController) {
-      lineNumbersController.toggle()
+    const codemirrorController = this.getCodemirrorController()
+    if (codemirrorController) {
+      this.lineNumberMode = codemirrorController.toggleLineNumberMode()
+      this.saveConfig({ editor_line_numbers: this.lineNumberMode })
     }
   }
 
-  // Handle line-numbers:mode-changed event
-  onLineNumberModeChanged(event) {
-    const { mode } = event.detail
-    this.lineNumberMode = mode
-    this.saveConfig({ editor_line_numbers: mode })
-  }
 
   // === Path Display - Delegates to path_display_controller ===
 
@@ -1217,44 +1222,42 @@ export default class extends Controller {
       previewController.setTypewriterMode(enabled)
     }
 
-    // Typewriter mode controls explorer and preview visibility
+    // Typewriter mode: hide sidebar and preview for distraction-free writing
+    // Editor is centered on screen with content width control
     if (enabled) {
       // Hide explorer
       this.sidebarVisible = false
       this.applySidebarVisibility()
 
-      // Show preview
-      if (previewController && !previewController.isVisible) {
-        previewController.show()
-        this.updatePreview()
-        setTimeout(() => this.syncPreviewScrollToCursor(), 50)
+      // Hide preview (keep editor only for focused writing)
+      if (previewController && previewController.isVisible) {
+        previewController.hide()
       }
+
+      // Add typewriter body class for full-width editor centering
+      document.body.classList.add("typewriter-mode")
     } else {
       // Show explorer
       this.sidebarVisible = true
       this.applySidebarVisibility()
 
-      // Hide preview
-      if (previewController && previewController.isVisible) {
-        previewController.hide()
-      }
+      // Remove typewriter body class
+      document.body.classList.remove("typewriter-mode")
     }
   }
 
   maintainTypewriterScroll() {
-    const typewriterController = this.getTypewriterController()
-    if (typewriterController && typewriterController.isEnabled) {
-      typewriterController.maintainScroll()
+    const codemirrorController = this.getCodemirrorController()
+    if (codemirrorController && this.typewriterModeEnabled) {
+      codemirrorController.maintainTypewriterScroll()
 
       // Also sync preview if visible
       const previewController = this.getPreviewController()
-      if (previewController && previewController.isVisible && this.hasTextareaTarget) {
-        const content = this.textareaTarget.value
-        const cursorPos = this.textareaTarget.selectionStart
-        const textBeforeCursor = content.substring(0, cursorPos)
-        const currentLine = textBeforeCursor.split("\n").length
-        const totalLines = content.split("\n").length
-        previewController.syncToTypewriter(currentLine, totalLines)
+      if (previewController && previewController.isVisible) {
+        const syncData = codemirrorController.getTypewriterSyncData()
+        if (syncData) {
+          previewController.syncToTypewriter(syncData.currentLine, syncData.totalLines)
+        }
       }
     }
   }
@@ -1317,12 +1320,8 @@ export default class extends Controller {
   }
 
   openFindReplace(options = {}) {
-    if (!this.hasTextareaTarget) return
-
-    const selection = this.textareaTarget.value.substring(
-      this.textareaTarget.selectionStart,
-      this.textareaTarget.selectionEnd
-    )
+    const codemirrorController = this.getCodemirrorController()
+    const selection = codemirrorController ? codemirrorController.getSelection().text : ""
 
     const findReplaceElement = document.querySelector('[data-controller~="find-replace"]')
     if (findReplaceElement) {
@@ -1331,8 +1330,9 @@ export default class extends Controller {
         "find-replace"
       )
       if (findReplaceController) {
+        // Pass the codemirror controller's API adapter
         findReplaceController.open({
-          textarea: this.textareaTarget,
+          textarea: this.createTextareaAdapter(),
           tab: options.tab,
           query: selection || undefined
         })
@@ -1340,50 +1340,79 @@ export default class extends Controller {
     }
   }
 
-  onFindReplaceJump(event) {
-    if (!this.hasTextareaTarget) return
+  // Create an adapter that makes CodeMirror look like a textarea for find/replace
+  createTextareaAdapter() {
+    const codemirrorController = this.getCodemirrorController()
+    if (!codemirrorController) {
+      return this.hasTextareaTarget ? this.textareaTarget : null
+    }
 
+    return {
+      get value() { return codemirrorController.getValue() },
+      set value(text) { codemirrorController.setValue(text) },
+      get selectionStart() { return codemirrorController.getSelection().from },
+      get selectionEnd() { return codemirrorController.getSelection().to },
+      setSelectionRange(from, to) { codemirrorController.setSelection(from, to) },
+      focus() { codemirrorController.focus() },
+      addEventListener(event, handler) {
+        // The find_replace_controller listens for input events
+        // We need to handle this via CodeMirror's event system
+        if (event === "input") {
+          this._inputHandler = handler
+        }
+      },
+      removeEventListener(event, handler) {
+        if (event === "input") {
+          this._inputHandler = null
+        }
+      },
+      dispatchEvent(event) {
+        // Handle synthetic events
+        if (event.type === "input" && this._inputHandler) {
+          this._inputHandler(event)
+        }
+      }
+    }
+  }
+
+  onFindReplaceJump(event) {
     const { start, end } = event.detail
-    const textarea = this.textareaTarget
-    textarea.focus()
-    textarea.setSelectionRange(start, end)
-    this.scrollTextareaToPosition(start)
+    const codemirrorController = this.getCodemirrorController()
+
+    if (codemirrorController) {
+      codemirrorController.focus()
+      codemirrorController.setSelection(start, end)
+      codemirrorController.scrollToPosition(start)
+    }
   }
 
   onFindReplaceReplace(event) {
-    if (!this.hasTextareaTarget) return
-
     const { start, end, replacement } = event.detail
-    const textarea = this.textareaTarget
-    const text = textarea.value
-    const before = text.substring(0, start)
-    const after = text.substring(end)
-    textarea.value = before + replacement + after
+    const codemirrorController = this.getCodemirrorController()
 
-    const newPosition = start + replacement.length
-    textarea.focus()
-    textarea.setSelectionRange(newPosition, newPosition)
-    this.scrollTextareaToPosition(newPosition)
-    this.triggerTextareaInput()
+    if (codemirrorController) {
+      codemirrorController.replaceRange(replacement, start, end)
+      const newPosition = start + replacement.length
+      codemirrorController.setSelection(newPosition, newPosition)
+      codemirrorController.scrollToPosition(newPosition)
+      this.onEditorChange({ detail: { docChanged: true } })
+    }
   }
 
   onFindReplaceReplaceAll(event) {
-    if (!this.hasTextareaTarget) return
-
     const { updatedText } = event.detail
     if (typeof updatedText !== "string") return
 
-    const textarea = this.textareaTarget
-    textarea.value = updatedText
-    textarea.focus()
-    textarea.setSelectionRange(0, 0)
-    this.scrollTextareaToPosition(0)
-    this.triggerTextareaInput()
+    const codemirrorController = this.getCodemirrorController()
+    if (codemirrorController) {
+      codemirrorController.setValue(updatedText)
+      codemirrorController.setSelection(0, 0)
+      codemirrorController.scrollTo(0)
+      this.onEditorChange({ detail: { docChanged: true } })
+    }
   }
 
   openJumpToLine() {
-    if (!this.hasTextareaTarget) return
-
     const jumpElement = document.querySelector('[data-controller~="jump-to-line"]')
     if (jumpElement) {
       const jumpController = this.application.getControllerForElementAndIdentifier(
@@ -1391,7 +1420,8 @@ export default class extends Controller {
         "jump-to-line"
       )
       if (jumpController) {
-        jumpController.open(this.textareaTarget)
+        // Pass a textarea adapter for the jump-to-line controller
+        jumpController.open(this.createTextareaAdapter())
       }
     }
   }
@@ -1424,38 +1454,17 @@ export default class extends Controller {
   }
 
   jumpToLine(lineNumber) {
-    if (!this.hasTextareaTarget) return
-
-    const textarea = this.textareaTarget
-
-    // Use utility function to calculate character position
-    const charPos = getPositionForLine(textarea.value, lineNumber)
-
-    // Set cursor position
-    textarea.focus()
-    textarea.setSelectionRange(charPos, charPos)
-
-    // Scroll to make the line visible using utility function
-    const style = window.getComputedStyle(textarea)
-    const fontSize = parseFloat(style.fontSize) || 14
-    const lineHeight = parseFloat(style.lineHeight) || fontSize * 1.6
-    const targetScroll = calculateScrollForLine(lineNumber, lineHeight, textarea.clientHeight)
-
-    textarea.scrollTop = targetScroll
+    const codemirrorController = this.getCodemirrorController()
+    if (codemirrorController) {
+      codemirrorController.jumpToLine(lineNumber)
+    }
   }
 
   scrollTextareaToPosition(position) {
-    if (!this.hasTextareaTarget) return
-
-    const textarea = this.textareaTarget
-    const { line: lineNumber } = getTextCursorInfo(textarea.value, position)
-
-    const style = window.getComputedStyle(textarea)
-    const fontSize = parseFloat(style.fontSize) || 14
-    const lineHeight = parseFloat(style.lineHeight) || fontSize * 1.6
-    const targetScroll = calculateScrollForLine(lineNumber, lineHeight, textarea.clientHeight)
-
-    textarea.scrollTop = targetScroll
+    const codemirrorController = this.getCodemirrorController()
+    if (codemirrorController) {
+      codemirrorController.scrollToPosition(position)
+    }
   }
 
   // === Help Dialog - delegates to help controller ===
@@ -1468,10 +1477,11 @@ export default class extends Controller {
 
   // === Code Snippet Editor - Delegates to code_dialog_controller ===
   openCodeEditor() {
-    if (!this.hasTextareaTarget) return
+    const codemirrorController = this.getCodemirrorController()
+    if (!codemirrorController) return
 
-    const text = this.textareaTarget.value
-    const cursorPos = this.textareaTarget.selectionStart
+    const text = codemirrorController.getValue()
+    const cursorPos = codemirrorController.getCursorPosition().offset
     const codeBlock = findCodeBlockAtPosition(text, cursorPos)
 
     // Find the code-dialog controller and call open
@@ -1499,25 +1509,22 @@ export default class extends Controller {
 
   // Handle code insert event from code_dialog_controller
   onCodeInsert(event) {
-    if (!this.hasTextareaTarget) return
+    const codemirrorController = this.getCodemirrorController()
+    if (!codemirrorController) return
 
     const { codeBlock, language, editMode, startPos, endPos } = event.detail
-    const textarea = this.textareaTarget
-    const text = textarea.value
+    const text = codemirrorController.getValue()
 
     let newCursorPos
 
     if (editMode) {
       // Replace existing code block
-      const before = text.substring(0, startPos)
-      const after = text.substring(endPos)
-      textarea.value = before + codeBlock + after
-
+      codemirrorController.replaceRange(codeBlock, startPos, endPos)
       // Position cursor at first line of content (after ```language\n)
       newCursorPos = startPos + 3 + language.length + 1
     } else {
       // Insert at cursor
-      const cursorPos = textarea.selectionStart
+      const cursorPos = codemirrorController.getCursorPosition().offset
       const before = text.substring(0, cursorPos)
       const after = text.substring(cursorPos)
 
@@ -1525,18 +1532,19 @@ export default class extends Controller {
       const prefix = before.length > 0 && !before.endsWith("\n\n") ? (before.endsWith("\n") ? "\n" : "\n\n") : ""
       const suffix = after.length > 0 && !after.startsWith("\n\n") ? (after.startsWith("\n") ? "\n" : "\n\n") : ""
 
-      textarea.value = before + prefix + codeBlock + suffix + after
+      const insert = prefix + codeBlock + suffix
+      codemirrorController.insertAt(cursorPos, insert)
 
       // Position cursor at first line inside the fence (after ```language\n)
-      newCursorPos = before.length + prefix.length + 3 + language.length + 1
+      newCursorPos = cursorPos + prefix.length + 3 + language.length + 1
     }
 
-    // Focus first, then set cursor position
-    textarea.focus()
+    // Focus and set cursor position
+    codemirrorController.focus()
     setTimeout(() => {
-      textarea.setSelectionRange(newCursorPos, newCursorPos)
+      codemirrorController.setSelection(newCursorPos, newCursorPos)
     }, 0)
-    this.triggerTextareaInput()
+    this.onEditorChange({ detail: { docChanged: true } })
   }
 
   // About Dialog - delegates to help controller
@@ -1564,11 +1572,13 @@ export default class extends Controller {
   // Video Embed Event Handler - receives events from video_dialog_controller
   insertVideoEmbed(event) {
     const { embedCode } = event.detail
-    if (!embedCode || !this.hasTextareaTarget) return
+    if (!embedCode) return
 
-    const textarea = this.textareaTarget
-    const cursorPos = textarea.selectionStart
-    const text = textarea.value
+    const codemirrorController = this.getCodemirrorController()
+    if (!codemirrorController) return
+
+    const cursorPos = codemirrorController.getCursorPosition().offset
+    const text = codemirrorController.getValue()
     const before = text.substring(0, cursorPos)
     const after = text.substring(cursorPos)
 
@@ -1576,12 +1586,13 @@ export default class extends Controller {
     const prefix = before.length > 0 && !before.endsWith("\n\n") ? (before.endsWith("\n") ? "\n" : "\n\n") : ""
     const suffix = after.length > 0 && !after.startsWith("\n\n") ? (after.startsWith("\n") ? "\n" : "\n\n") : ""
 
-    textarea.value = before + prefix + embedCode + suffix + after
+    const insert = prefix + embedCode + suffix
+    codemirrorController.insertAt(cursorPos, insert)
 
-    const newCursorPos = before.length + prefix.length + embedCode.length
-    textarea.focus()
-    textarea.setSelectionRange(newCursorPos, newCursorPos)
-    this.triggerTextareaInput()
+    const newCursorPos = cursorPos + insert.length
+    codemirrorController.focus()
+    codemirrorController.setSelection(newCursorPos, newCursorPos)
+    this.onEditorChange({ detail: { docChanged: true } })
   }
 
   // === AI Grammar Check Methods - Delegates to ai_grammar_controller ===
@@ -1618,7 +1629,10 @@ export default class extends Controller {
 
   // Handle AI processing started event - disable editor and show button loading state
   onAiProcessingStarted() {
-    this.textareaTarget.disabled = true
+    const codemirrorController = this.getCodemirrorController()
+    if (codemirrorController) {
+      codemirrorController.setReadOnly(true)
+    }
 
     if (this.hasAiButtonTarget) {
       this.aiButtonOriginalContent = this.aiButtonTarget.innerHTML
@@ -1635,7 +1649,10 @@ export default class extends Controller {
 
   // Handle AI processing ended event - re-enable editor and restore button
   onAiProcessingEnded() {
-    this.textareaTarget.disabled = false
+    const codemirrorController = this.getCodemirrorController()
+    if (codemirrorController) {
+      codemirrorController.setReadOnly(false)
+    }
 
     if (this.hasAiButtonTarget && this.aiButtonOriginalContent) {
       this.aiButtonTarget.innerHTML = this.aiButtonOriginalContent
@@ -1643,11 +1660,14 @@ export default class extends Controller {
     }
   }
 
-  // Handle AI correction accepted event - update textarea with corrected text
+  // Handle AI correction accepted event - update editor with corrected text
   onAiAccepted(event) {
     const { correctedText } = event.detail
-    this.textareaTarget.value = correctedText
-    this.triggerTextareaInput()
+    const codemirrorController = this.getCodemirrorController()
+    if (codemirrorController) {
+      codemirrorController.setValue(correctedText)
+      this.onEditorChange({ detail: { docChanged: true } })
+    }
   }
 
   // Handle preview zoom changed event - save to config
@@ -1674,7 +1694,8 @@ export default class extends Controller {
 
   // Handle preview scroll event - sync editor to preview position
   onPreviewScroll(event) {
-    if (!this.hasTextareaTarget) return
+    const codemirrorController = this.getCodemirrorController()
+    if (!codemirrorController) return
 
     // Don't sync if this scroll was caused by editor sync (prevents feedback loop)
     if (this._scrollSource === "editor") return
@@ -1682,18 +1703,26 @@ export default class extends Controller {
     // Mark that preview initiated this scroll
     this._markScrollFromPreview()
 
-    const { scrollRatio } = event.detail
-    const textarea = this.textareaTarget
+    const { scrollRatio, sourceLine, totalLines } = event.detail
+    const scrollInfo = codemirrorController.getScrollInfo()
+    const maxScroll = scrollInfo.height - scrollInfo.clientHeight
+    if (maxScroll <= 0) return
 
-    // Calculate target scroll position for editor
-    const scrollHeight = textarea.scrollHeight - textarea.clientHeight
-    if (scrollHeight <= 0) return
+    let targetScroll
 
-    const targetScroll = scrollRatio * scrollHeight
+    // Try line-based sync first (more accurate with images/embeds)
+    if (sourceLine && totalLines > 1) {
+      // Convert source line to scroll position
+      const lineRatio = (sourceLine - 1) / (totalLines - 1)
+      targetScroll = lineRatio * maxScroll
+    } else {
+      // Fallback to ratio-based sync
+      targetScroll = scrollRatio * maxScroll
+    }
 
     // Only scroll if change is significant (prevent jitter)
-    if (Math.abs(textarea.scrollTop - targetScroll) > 5) {
-      textarea.scrollTop = targetScroll
+    if (Math.abs(scrollInfo.top - targetScroll) > 5) {
+      codemirrorController.scrollTo(targetScroll)
     }
   }
 
@@ -1827,6 +1856,8 @@ export default class extends Controller {
       typewriterMode: () => this.toggleTypewriterMode(),
       textFormat: () => this.openTextFormatMenu(),
       emojiPicker: () => this.openEmojiPicker(),
+      increaseWidth: () => this.increaseEditorWidth(),
+      decreaseWidth: () => this.decreaseEditorWidth(),
       help: () => this.openHelp(),
       closeDialogs: () => this.closeAllDialogs()
     }
@@ -1851,91 +1882,47 @@ export default class extends Controller {
   }
 
   // === Editor Indentation ===
+  // Note: Tab/Shift+Tab indentation is now handled by CodeMirror's indentWithTab keymap
 
   // Get the current indent string
   getIndentString() {
     return this.editorIndent || "  "
   }
 
-  // Handle keydown events on textarea (Tab/Shift+Tab for indentation)
+  // Handle keydown events on textarea (legacy - now handled by CodeMirror)
   onTextareaKeydown(event) {
-    // Only handle Tab key
-    if (event.key !== "Tab") return
-
-    // Don't interfere if a dialog is open or modifier keys other than Shift are pressed
-    if (event.ctrlKey || event.metaKey || event.altKey) return
-
-    const textarea = this.textareaTarget
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const text = textarea.value
-
-    // Check if there's a selection spanning multiple characters
-    if (start === end) {
-      // No selection - insert indent at cursor (default Tab behavior but with our indent string)
-      event.preventDefault()
-      if (!event.shiftKey) {
-        const indent = this.getIndentString()
-        const before = text.substring(0, start)
-        const after = text.substring(end)
-        textarea.value = before + indent + after
-        textarea.selectionStart = textarea.selectionEnd = start + indent.length
-        this.triggerTextareaInput()
-      }
-      return
-    }
-
-    // There's a selection - indent/unindent block using utility functions
-    event.preventDefault()
-
-    const { lineStart, lineEnd, lines } = getLineBoundaries(text, start, end)
-    const selectedText = lines.join("\n")
-    const indent = this.getIndentString()
-
-    // Use imported indentLines/unindentLines from lib/indent_utils.js
-    const modifiedText = event.shiftKey
-      ? unindentLines(selectedText, indent)
-      : indentLines(selectedText, indent)
-
-    const before = text.substring(0, lineStart)
-    const after = text.substring(lineEnd)
-
-    textarea.value = before + modifiedText + after
-
-    // Adjust selection to cover the modified lines
-    const lengthDiff = modifiedText.length - selectedText.length
-    textarea.selectionStart = lineStart
-    textarea.selectionEnd = lineEnd + lengthDiff
-
-    this.triggerTextareaInput()
+    // CodeMirror handles Tab/Shift+Tab indentation via indentWithTab keymap
+    // This method is kept for backward compatibility but doesn't need to do anything
   }
 
   // === Text Format Menu ===
 
   // Open text format menu via Ctrl+M
   openTextFormatMenu() {
-    if (!this.hasTextareaTarget) return
     if (!this.isMarkdownFile()) return
+
+    const codemirrorController = this.getCodemirrorController()
+    if (!codemirrorController) return
 
     const textFormatController = this.getTextFormatController()
     if (textFormatController) {
-      textFormatController.openAtCursor(this.textareaTarget)
+      // Use the textarea adapter for text format controller
+      textFormatController.openAtCursor(this.createTextareaAdapter())
     }
   }
 
-  // Handle right-click on textarea to show text format menu
+  // Handle right-click on editor to show text format menu
   onTextareaContextMenu(event) {
-    if (!this.hasTextareaTarget) return
     if (!this.isMarkdownFile()) return
 
-    const textarea = this.textareaTarget
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
+    const codemirrorController = this.getCodemirrorController()
+    if (!codemirrorController) return
+
+    const { from, to, text: selectedText } = codemirrorController.getSelection()
 
     // Only show custom menu if text is selected
-    if (start === end) return // Let default context menu show
+    if (from === to) return // Let default context menu show
 
-    const selectedText = textarea.value.substring(start, end)
     if (!selectedText.trim()) return // Let default context menu show
 
     // Prevent default context menu
@@ -1943,20 +1930,20 @@ export default class extends Controller {
 
     const textFormatController = this.getTextFormatController()
     if (textFormatController) {
-      textFormatController.openAtPosition(this.textareaTarget, event.clientX, event.clientY)
+      textFormatController.openAtPosition(this.createTextareaAdapter(), event.clientX, event.clientY)
     }
   }
 
   // Handle text format applied event
   onTextFormatApplied(event) {
-    if (!this.hasTextareaTarget) return
+    const codemirrorController = this.getCodemirrorController()
+    if (!codemirrorController) return
 
     const { prefix, suffix, selectionData } = event.detail
     if (!selectionData) return
 
-    const textarea = this.textareaTarget
     const { start, end, text } = selectionData
-    const fullText = textarea.value
+    const fullText = codemirrorController.getValue()
 
     // Check for toggle (unwrap) if format is symmetric
     const isToggleable = prefix === suffix
@@ -1964,11 +1951,9 @@ export default class extends Controller {
       // Case 1: Selection itself includes the markers
       if (text.startsWith(prefix) && text.endsWith(suffix) && text.length >= prefix.length + suffix.length) {
         const unwrapped = text.slice(prefix.length, -suffix.length || undefined)
-        const before = fullText.substring(0, start)
-        const after = fullText.substring(end)
-        textarea.value = before + unwrapped + after
-        textarea.setSelectionRange(start, start + unwrapped.length)
-        textarea.focus()
+        codemirrorController.replaceRange(unwrapped, start, end)
+        codemirrorController.setSelection(start, start + unwrapped.length)
+        codemirrorController.focus()
         this.scheduleAutoSave()
         this.updatePreview()
         return
@@ -1981,11 +1966,9 @@ export default class extends Controller {
         const textBefore = fullText.substring(beforeStart, start)
         const textAfter = fullText.substring(end, afterEnd)
         if (textBefore === prefix && textAfter === suffix) {
-          const before = fullText.substring(0, beforeStart)
-          const after = fullText.substring(afterEnd)
-          textarea.value = before + text + after
-          textarea.setSelectionRange(beforeStart, beforeStart + text.length)
-          textarea.focus()
+          codemirrorController.replaceRange(text, beforeStart, afterEnd)
+          codemirrorController.setSelection(beforeStart, beforeStart + text.length)
+          codemirrorController.focus()
           this.scheduleAutoSave()
           this.updatePreview()
           return
@@ -1997,23 +1980,21 @@ export default class extends Controller {
     const formattedText = prefix + text + suffix
 
     // Replace the selected text
-    const before = fullText.substring(0, start)
-    const after = fullText.substring(end)
-    textarea.value = before + formattedText + after
+    codemirrorController.replaceRange(formattedText, start, end)
 
     // Calculate new cursor position
     // For link format, select "url" for easy replacement
     if (prefix === "[" && suffix === "](url)") {
       const urlStart = start + prefix.length + text.length + 2 // After ](
       const urlEnd = urlStart + 3 // Select "url"
-      textarea.setSelectionRange(urlStart, urlEnd)
+      codemirrorController.setSelection(urlStart, urlEnd)
     } else {
       // Position cursor after the formatted text
       const newPosition = start + formattedText.length
-      textarea.setSelectionRange(newPosition, newPosition)
+      codemirrorController.setSelection(newPosition, newPosition)
     }
 
-    textarea.focus()
+    codemirrorController.focus()
     this.scheduleAutoSave()
     this.updatePreview()
   }
@@ -2026,13 +2007,15 @@ export default class extends Controller {
   }
 
   // Apply inline formatting directly (for keyboard shortcuts like Ctrl+B, Ctrl+I)
+  // Note: CodeMirror now handles Ctrl+B and Ctrl+I via its own keymap
   applyInlineFormat(formatId) {
-    if (!this.hasTextareaTarget) return
+    const codemirrorController = this.getCodemirrorController()
+    if (!codemirrorController) return
 
     const textFormatController = this.getTextFormatController()
     if (!textFormatController) return
 
-    if (textFormatController.applyFormatById(formatId, this.textareaTarget)) {
+    if (textFormatController.applyFormatById(formatId, this.createTextareaAdapter())) {
       this.scheduleAutoSave()
       this.updatePreview()
     }
@@ -2053,26 +2036,22 @@ export default class extends Controller {
 
   // Handle emoji/emoticon selected event
   onEmojiSelected(event) {
-    if (!this.hasTextareaTarget) return
+    const codemirrorController = this.getCodemirrorController()
+    if (!codemirrorController) return
 
     const { text: insertText } = event.detail
     if (!insertText) return
 
-    const textarea = this.textareaTarget
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const text = textarea.value
+    const { from, to } = codemirrorController.getSelection()
 
     // Insert the emoji/emoticon at cursor position
-    const before = text.substring(0, start)
-    const after = text.substring(end)
-    textarea.value = before + insertText + after
+    codemirrorController.replaceRange(insertText, from, to)
 
     // Position cursor after the inserted text
-    const newPosition = start + insertText.length
-    textarea.setSelectionRange(newPosition, newPosition)
+    const newPosition = from + insertText.length
+    codemirrorController.setSelection(newPosition, newPosition)
 
-    textarea.focus()
+    codemirrorController.focus()
     this.scheduleAutoSave()
     this.updatePreview()
   }
@@ -2150,34 +2129,32 @@ export default class extends Controller {
 
   scheduleStatsUpdate() {
     const statsController = this.getStatsPanelController()
-    if (statsController && this.hasTextareaTarget) {
-      statsController.scheduleUpdate(this.textareaTarget.value, this.getCursorInfo())
+    const codemirrorController = this.getCodemirrorController()
+    if (statsController && codemirrorController) {
+      statsController.scheduleUpdate(codemirrorController.getValue(), codemirrorController.getCursorInfo())
     }
   }
 
   updateStats() {
     const statsController = this.getStatsPanelController()
-    if (statsController && this.hasTextareaTarget) {
-      statsController.update(this.textareaTarget.value, this.getCursorInfo())
+    const codemirrorController = this.getCodemirrorController()
+    if (statsController && codemirrorController) {
+      statsController.update(codemirrorController.getValue(), codemirrorController.getCursorInfo())
     }
   }
 
   updateLinePosition() {
     const statsController = this.getStatsPanelController()
-    if (statsController && this.hasTextareaTarget) {
-      statsController.updateLinePosition(this.getCursorInfo())
+    const codemirrorController = this.getCodemirrorController()
+    if (statsController && codemirrorController) {
+      statsController.updateLinePosition(codemirrorController.getCursorInfo())
     }
   }
 
   getCursorInfo() {
-    if (!this.hasTextareaTarget) return null
+    const codemirrorController = this.getCodemirrorController()
+    if (!codemirrorController) return null
 
-    const text = this.textareaTarget.value
-    const cursorPos = this.textareaTarget.selectionStart
-    const textBeforeCursor = text.substring(0, cursorPos)
-    const currentLine = textBeforeCursor.split("\n").length
-    const totalLines = text.split("\n").length
-
-    return { currentLine, totalLines }
+    return codemirrorController.getCursorInfo()
   }
 }

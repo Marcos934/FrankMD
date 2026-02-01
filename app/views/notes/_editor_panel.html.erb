@@ -129,27 +129,24 @@
       </div>
     </div>
     <div class="h-full hidden relative" data-app-target="editor"
-         data-controller="line-numbers"
-         data-action="line-numbers:mode-changed->app#onLineNumberModeChanged">
+         data-controller="codemirror typewriter"
+         data-action="codemirror:change->app#onEditorChange codemirror:selection-change->app#onEditorSelectionChange codemirror:scroll->app#onEditorScroll typewriter:toggled->app#onTypewriterToggled">
       <div class="h-full flex editor-wrapper" data-app-target="editorWrapper" data-typewriter-target="wrapper">
-        <div class="editor-line-number-gutter text-xs text-[var(--theme-text-faint)] hidden" data-line-numbers-target="gutter">
-          <pre class="editor-line-numbers" data-line-numbers-target="numbers"></pre>
-        </div>
         <div class="flex-1 h-full editor-body" data-app-target="editorBody" data-typewriter-target="body">
-          <div class="editor-highlight-wrapper h-full" data-controller="syntax-highlight">
-            <pre data-syntax-highlight-target="highlight" class="syntax-highlight-layer" aria-hidden="true"></pre>
-            <textarea
-              data-app-target="textarea"
-              data-connection-monitor-target="textarea"
-              data-line-numbers-target="textarea"
-              data-typewriter-target="textarea"
-              data-syntax-highlight-target="textarea"
-              data-action="input->app#onTextareaInput contextmenu->app#onTextareaContextMenu keydown->app#onTextareaKeydown keyup->app#onTextareaSelectionChange click->app#onTextareaSelectionChange scroll->app#onTextareaScroll scroll->syntax-highlight#syncScroll"
-              class="editor-textarea syntax-highlight-enabled w-full h-full p-4 resize-none font-mono text-sm leading-relaxed focus:outline-none"
-              placeholder="<%= t('editor.start_writing') %>"
-              spellcheck="false"
-            ></textarea>
+          <!-- CodeMirror container -->
+          <div class="h-full cm-editor-container"
+               data-codemirror-target="container"
+               data-typewriter-target="editor"
+               data-action="contextmenu->app#onTextareaContextMenu">
           </div>
+          <!-- Hidden textarea for form submission and backward compatibility -->
+          <textarea
+            data-app-target="textarea"
+            data-codemirror-target="hidden"
+            data-connection-monitor-target="textarea"
+            class="hidden"
+            name="document[content]"
+          ></textarea>
         </div>
       </div>
     </div>

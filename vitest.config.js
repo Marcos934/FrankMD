@@ -5,6 +5,7 @@ export default defineConfig({
   test: {
     include: ['test/javascript/**/*.test.js'],
     environment: 'node',
+    setupFiles: ['./test/javascript/setup.js'],
   },
   resolve: {
     alias: {

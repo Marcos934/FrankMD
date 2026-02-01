@@ -1,12 +1,12 @@
 import { Controller } from "@hotwired/stimulus"
-import { calculateTypewriterScroll, getTypewriterSyncData } from "lib/typewriter_utils"
 
 // Typewriter Controller
 // Handles typewriter mode - focused writing with cursor centered in viewport
+// Now delegates scroll management to CodeMirror's typewriter extension
 // Dispatches typewriter:toggled event with { enabled }
 
 export default class extends Controller {
-  static targets = ["textarea", "wrapper", "body", "toggleButton"]
+  static targets = ["wrapper", "body", "toggleButton", "editor"]
 
   static values = {
     enabled: { type: Boolean, default: false }
@@ -21,9 +21,10 @@ export default class extends Controller {
     this.enabledValue = !this.enabledValue
     this.applyMode()
 
-    // Immediately apply typewriter scroll if enabling
-    if (this.enabledValue) {
-      this.maintainScroll()
+    // If CodeMirror is available, toggle its typewriter mode
+    const codemirrorController = this.getCodemirrorController()
+    if (codemirrorController) {
+      codemirrorController.setTypewriterMode(this.enabledValue)
     }
 
     // Dispatch event for parent controller to handle config save and sidebar/preview coordination
@@ -32,9 +33,6 @@ export default class extends Controller {
 
   // Apply current mode to UI elements
   applyMode() {
-    if (this.hasTextareaTarget) {
-      this.textareaTarget.classList.toggle("typewriter-mode", this.enabledValue)
-    }
     if (this.hasWrapperTarget) {
       this.wrapperTarget.classList.toggle("typewriter-centered", this.enabledValue)
     }
@@ -48,72 +46,23 @@ export default class extends Controller {
   }
 
   // Keep cursor at center (50%) of the editor in typewriter mode
+  // Now delegates to CodeMirror's typewriter extension
   maintainScroll() {
     if (!this.enabledValue) return
-    if (!this.hasTextareaTarget) return
 
-    const textarea = this.textareaTarget
-    const cursorPos = textarea.selectionStart
-
-    // Use mirror div technique to get accurate cursor position
-    const cursorY = this.getCursorYPosition(textarea, cursorPos)
-
-    // Calculate desired scroll position using utility function
-    const desiredScrollTop = calculateTypewriterScroll(cursorY, textarea.clientHeight)
-
-    // Use setTimeout to ensure we run after all browser scroll behavior
-    setTimeout(() => {
-      textarea.scrollTop = desiredScrollTop
-    }, 0)
-  }
-
-  // Get cursor Y position using mirror div technique
-  getCursorYPosition(textarea, cursorPos) {
-    // Create a mirror div that matches the textarea's styling
-    const mirror = document.createElement("div")
-    const style = window.getComputedStyle(textarea)
-
-    // Copy relevant styles - use offsetWidth with border-box to match textarea exactly
-    mirror.style.cssText = `
-      position: absolute;
-      top: -9999px;
-      left: -9999px;
-      box-sizing: border-box;
-      width: ${textarea.offsetWidth}px;
-      height: auto;
-      font-family: ${style.fontFamily};
-      font-size: ${style.fontSize};
-      font-weight: ${style.fontWeight};
-      line-height: ${style.lineHeight};
-      padding: ${style.padding};
-      border: ${style.border};
-      white-space: pre-wrap;
-      word-wrap: break-word;
-      overflow-wrap: break-word;
-    `
-
-    // Get text before cursor and add a marker span
-    const textBefore = textarea.value.substring(0, cursorPos)
-    mirror.textContent = textBefore
-
-    // Add a marker element at cursor position
-    const marker = document.createElement("span")
-    marker.textContent = "|"
-    mirror.appendChild(marker)
-
-    document.body.appendChild(mirror)
-    const cursorY = marker.offsetTop
-    document.body.removeChild(mirror)
-
-    return cursorY
+    const codemirrorController = this.getCodemirrorController()
+    if (codemirrorController) {
+      codemirrorController.maintainTypewriterScroll()
+    }
   }
 
   // Get sync data for preview controller
   getSyncData() {
-    if (!this.hasTextareaTarget) return null
-
-    const textarea = this.textareaTarget
-    return getTypewriterSyncData(textarea.value, textarea.selectionStart)
+    const codemirrorController = this.getCodemirrorController()
+    if (codemirrorController) {
+      return codemirrorController.getTypewriterSyncData()
+    }
+    return null
   }
 
   // Check if typewriter mode is enabled
@@ -125,5 +74,20 @@ export default class extends Controller {
   setEnabled(enabled) {
     this.enabledValue = enabled
     this.applyMode()
+
+    // Sync with CodeMirror
+    const codemirrorController = this.getCodemirrorController()
+    if (codemirrorController) {
+      codemirrorController.setTypewriterMode(enabled)
+    }
+  }
+
+  // Get the CodeMirror controller
+  getCodemirrorController() {
+    const element = document.querySelector('[data-controller~="codemirror"]')
+    if (element) {
+      return this.application.getControllerForElementAndIdentifier(element, "codemirror")
+    }
+    return null
   }
 }
