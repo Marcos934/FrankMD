@@ -901,20 +901,20 @@ MIT License - see [LICENSE](LICENSE) for details.
 | Browser tab (Brave/Chrome) | ~340 MB |
 | **Total** | **~455 MB** |
 
-### Codebase
+### Codebase (from `bin/rails stats`)
 
-| Type | Lines |
-|------|-------|
-| JavaScript | 13,819 |
-| ERB templates | 2,927 |
-| Ruby | 2,848 |
-| CSS | 1,620 |
-| **Total source** | **~21,200** |
+| Type | Lines | LOC |
+|------|-------|-----|
+| JavaScript | 13,793 | 10,081 |
+| Views (ERB) | 2,953 | 2,633 |
+| Models | 904 | 706 |
+| Controllers | 850 | 652 |
+| **Total source** | **~18,500** | **~14,100** |
 
 ### Test Coverage
 
-| Type | Tests | Lines |
-|------|-------|-------|
-| JavaScript (Vitest) | 1,070 | 11,696 |
-| Ruby (Minitest) | 355 | 5,075 |
-| **Total** | **1,425** | **16,771** |
+| Type | Tests | LOC |
+|------|-------|-----|
+| JavaScript (Vitest) | 1,070 | ~8,500 |
+| Ruby (Minitest) | 355 | 2,476 |
+| **Total** | **1,425** | **~11,000** |
