@@ -913,8 +913,8 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ### Test Coverage
 
-| Type | Tests | LOC |
-|------|-------|-----|
-| JavaScript (Vitest) | 1,070 | ~8,500 |
-| Ruby (Minitest) | 355 | 2,476 |
-| **Total** | **1,425** | **~11,000** |
+| Type | Tests | Lines |
+|------|-------|-------|
+| JavaScript (Vitest) | 1,070 | 11,696 |
+| Ruby (Minitest) | 355 | 3,707 |
+| **Total** | **1,425** | **15,403** |
