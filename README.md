@@ -163,18 +163,19 @@
 
 ## Quick Start
 
-### 1. Setup (one-time)
+### 1. Install
 
 ```bash
-# Download config files
-mkdir -p ~/.config/frankmd
-curl -sL https://raw.githubusercontent.com/akitaonrails/FrankMD/master/config/fed/fed.sh -o ~/.config/frankmd/fed.sh
-curl -sL https://raw.githubusercontent.com/akitaonrails/FrankMD/master/config/fed/splash.html -o ~/.config/frankmd/splash.html
-
-# Add to your shell (bash or zsh)
-echo 'source ~/.config/frankmd/fed.sh' >> ~/.bashrc
-source ~/.bashrc
+curl -sL https://raw.githubusercontent.com/akitaonrails/FrankMD/master/install.sh | bash
 ```
+
+Then add to your `~/.bashrc` or `~/.zshrc`:
+
+```bash
+source ~/.config/frankmd/fed.sh
+```
+
+To update, run the curl command again.
 
 ### 2. Run
 
