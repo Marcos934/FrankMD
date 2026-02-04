@@ -17,15 +17,22 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- UI Font -->
+    <!-- UI Font - loaded immediately (small, critical for layout) -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <!-- Editor Fonts (Google Fonts) -->
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Source+Code+Pro:wght@400;500&family=Roboto+Mono:wght@400;500&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
-    <!-- Additional Editor Fonts (CDN) -->
-    <link href="https://cdn.jsdelivr.net/npm/@fontsource/cascadia-code@5/index.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/@fontsource/hack@5/index.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/@fontsource/dejavu-mono@5/index.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/@fontsource/ubuntu-mono@5/index.min.css" rel="stylesheet">
+    <!-- Editor Fonts - loaded async (only needed when editing) -->
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Source+Code+Pro:wght@400;500&family=Roboto+Mono:wght@400;500&family=Fira+Code:wght@400;500&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Source+Code+Pro:wght@400;500&family=Roboto+Mono:wght@400;500&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet"></noscript>
+    <!-- Additional Editor Fonts (CDN) - loaded async -->
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/@fontsource/cascadia-code@5/index.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/@fontsource/hack@5/index.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/@fontsource/dejavu-mono@5/index.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/@fontsource/ubuntu-mono@5/index.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript>
+      <link href="https://cdn.jsdelivr.net/npm/@fontsource/cascadia-code@5/index.min.css" rel="stylesheet">
+      <link href="https://cdn.jsdelivr.net/npm/@fontsource/hack@5/index.min.css" rel="stylesheet">
+      <link href="https://cdn.jsdelivr.net/npm/@fontsource/dejavu-mono@5/index.min.css" rel="stylesheet">
+      <link href="https://cdn.jsdelivr.net/npm/@fontsource/ubuntu-mono@5/index.min.css" rel="stylesheet">
+    </noscript>
 
     <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
     <%= javascript_importmap_tags %>

@@ -1,7 +1,10 @@
 // Import and register all your controllers from the importmap via controllers/**/*_controller
 import { application } from "controllers/application"
-import { eagerLoadControllersFrom } from "@hotwired/stimulus-loading"
-eagerLoadControllersFrom("controllers", application)
+import { lazyLoadControllersFrom } from "@hotwired/stimulus-loading"
+
+// Lazy load controllers - they're loaded on-demand when their DOM elements appear
+// This improves initial page load by deferring dialog controllers until needed
+lazyLoadControllersFrom("controllers", application)
 
 // Manually register locale controller (needs to load early for translations)
 import LocaleController from "controllers/locale_controller"

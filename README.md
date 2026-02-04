@@ -200,41 +200,100 @@ export OPENAI_API_KEY=sk-...
 ### 2. Add the `fed` Function
 
 ```bash
-# FrankMD editor function - stops any running instance, starts new one, opens browser
+# FrankMD editor function - smart container management with auto-update
 fed() {
-  docker stop frankmd 2>/dev/null
-  docker rm frankmd 2>/dev/null
-
   local uid="${FRANKMD_UID:-$(id -u)}"
   local gid="${FRANKMD_GID:-$(id -g)}"
-  local args=(-d -p 7591:80 --user "${uid}:${gid}" -v "$(realpath "${1:-.}"):/rails/notes")
+  local notes_path="$(realpath "${1:-.}")"
+  local image="akitaonrails/frankmd:latest"
+  local need_restart=false
 
-  [[ -n "$FRANKMD_LOCALE" ]] && args+=(-e "FRANKMD_LOCALE=$FRANKMD_LOCALE")
-  [[ -n "$IMAGES_PATH" ]] && args+=(-v "$(realpath "$IMAGES_PATH"):/rails/images" -e IMAGES_PATH=/rails/images)
-  [[ -n "$AWS_ACCESS_KEY_ID" ]] && args+=(-e "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID")
-  [[ -n "$AWS_SECRET_ACCESS_KEY" ]] && args+=(-e "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY")
-  [[ -n "$AWS_S3_BUCKET" ]] && args+=(-e "AWS_S3_BUCKET=$AWS_S3_BUCKET")
-  [[ -n "$AWS_REGION" ]] && args+=(-e "AWS_REGION=$AWS_REGION")
-  [[ -n "$YOUTUBE_API_KEY" ]] && args+=(-e "YOUTUBE_API_KEY=$YOUTUBE_API_KEY")
-  [[ -n "$GOOGLE_API_KEY" ]] && args+=(-e "GOOGLE_API_KEY=$GOOGLE_API_KEY")
-  [[ -n "$GOOGLE_CSE_ID" ]] && args+=(-e "GOOGLE_CSE_ID=$GOOGLE_CSE_ID")
-  [[ -n "$AI_PROVIDER" ]] && args+=(-e "AI_PROVIDER=$AI_PROVIDER")
-  [[ -n "$AI_MODEL" ]] && args+=(-e "AI_MODEL=$AI_MODEL")
-  [[ -n "$OLLAMA_API_BASE" ]] && args+=(-e "OLLAMA_API_BASE=$OLLAMA_API_BASE")
-  [[ -n "$OLLAMA_MODEL" ]] && args+=(-e "OLLAMA_MODEL=$OLLAMA_MODEL")
-  [[ -n "$OPENROUTER_API_KEY" ]] && args+=(-e "OPENROUTER_API_KEY=$OPENROUTER_API_KEY")
-  [[ -n "$OPENROUTER_MODEL" ]] && args+=(-e "OPENROUTER_MODEL=$OPENROUTER_MODEL")
-  [[ -n "$ANTHROPIC_API_KEY" ]] && args+=(-e "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
-  [[ -n "$ANTHROPIC_MODEL" ]] && args+=(-e "ANTHROPIC_MODEL=$ANTHROPIC_MODEL")
-  [[ -n "$GEMINI_API_KEY" ]] && args+=(-e "GEMINI_API_KEY=$GEMINI_API_KEY")
-  [[ -n "$GEMINI_MODEL" ]] && args+=(-e "GEMINI_MODEL=$GEMINI_MODEL")
-  [[ -n "$OPENAI_API_KEY" ]] && args+=(-e "OPENAI_API_KEY=$OPENAI_API_KEY")
-  [[ -n "$OPENAI_MODEL" ]] && args+=(-e "OPENAI_MODEL=$OPENAI_MODEL")
+  # Check if container is running
+  if docker ps -q -f name=frankmd 2>/dev/null | grep -q .; then
+    # Container running - check if it's using the same notes path
+    local current_mount
+    current_mount=$(docker inspect frankmd --format '{{range .Mounts}}{{if eq .Destination "/rails/notes"}}{{.Source}}{{end}}{{end}}' 2>/dev/null)
+    if [[ "$current_mount" != "$notes_path" ]]; then
+      echo "Switching notes directory..."
+      need_restart=true
+    fi
+  else
+    need_restart=true
+  fi
 
-  docker run --name frankmd --rm "${args[@]}" akitaonrails/frankmd:latest
+  # If restart needed, stop and start fresh
+  if [[ "$need_restart" == "true" ]]; then
+    docker stop frankmd 2>/dev/null
+    docker rm frankmd 2>/dev/null
 
-  sleep 2
+    local args=(-d -p 7591:80 --user "${uid}:${gid}" -v "${notes_path}:/rails/notes")
+
+    [[ -n "$FRANKMD_LOCALE" ]] && args+=(-e "FRANKMD_LOCALE=$FRANKMD_LOCALE")
+    [[ -n "$IMAGES_PATH" ]] && args+=(-v "$(realpath "$IMAGES_PATH"):/rails/images" -e IMAGES_PATH=/rails/images)
+    [[ -n "$AWS_ACCESS_KEY_ID" ]] && args+=(-e "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID")
+    [[ -n "$AWS_SECRET_ACCESS_KEY" ]] && args+=(-e "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY")
+    [[ -n "$AWS_S3_BUCKET" ]] && args+=(-e "AWS_S3_BUCKET=$AWS_S3_BUCKET")
+    [[ -n "$AWS_REGION" ]] && args+=(-e "AWS_REGION=$AWS_REGION")
+    [[ -n "$YOUTUBE_API_KEY" ]] && args+=(-e "YOUTUBE_API_KEY=$YOUTUBE_API_KEY")
+    [[ -n "$GOOGLE_API_KEY" ]] && args+=(-e "GOOGLE_API_KEY=$GOOGLE_API_KEY")
+    [[ -n "$GOOGLE_CSE_ID" ]] && args+=(-e "GOOGLE_CSE_ID=$GOOGLE_CSE_ID")
+    [[ -n "$AI_PROVIDER" ]] && args+=(-e "AI_PROVIDER=$AI_PROVIDER")
+    [[ -n "$AI_MODEL" ]] && args+=(-e "AI_MODEL=$AI_MODEL")
+    [[ -n "$OLLAMA_API_BASE" ]] && args+=(-e "OLLAMA_API_BASE=$OLLAMA_API_BASE")
+    [[ -n "$OLLAMA_MODEL" ]] && args+=(-e "OLLAMA_MODEL=$OLLAMA_MODEL")
+    [[ -n "$OPENROUTER_API_KEY" ]] && args+=(-e "OPENROUTER_API_KEY=$OPENROUTER_API_KEY")
+    [[ -n "$OPENROUTER_MODEL" ]] && args+=(-e "OPENROUTER_MODEL=$OPENROUTER_MODEL")
+    [[ -n "$ANTHROPIC_API_KEY" ]] && args+=(-e "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
+    [[ -n "$ANTHROPIC_MODEL" ]] && args+=(-e "ANTHROPIC_MODEL=$ANTHROPIC_MODEL")
+    [[ -n "$GEMINI_API_KEY" ]] && args+=(-e "GEMINI_API_KEY=$GEMINI_API_KEY")
+    [[ -n "$GEMINI_MODEL" ]] && args+=(-e "GEMINI_MODEL=$GEMINI_MODEL")
+    [[ -n "$OPENAI_API_KEY" ]] && args+=(-e "OPENAI_API_KEY=$OPENAI_API_KEY")
+    [[ -n "$OPENAI_MODEL" ]] && args+=(-e "OPENAI_MODEL=$OPENAI_MODEL")
+
+    docker run --name frankmd --rm "${args[@]}" "$image"
+
+    # Wait for server to be ready (polls /up endpoint instead of fixed sleep)
+    echo -n "Starting FrankMD"
+    local max_attempts=50  # 5 seconds max
+    local attempt=0
+    while ! curl -sf http://localhost:7591/up >/dev/null 2>&1; do
+      echo -n "."
+      sleep 0.1
+      ((attempt++))
+      if [[ $attempt -ge $max_attempts ]]; then
+        echo " timeout!"
+        return 1
+      fi
+    done
+    echo " ready!"
+  fi
+
   brave --app=http://localhost:7591
+}
+
+# Update FrankMD image (run periodically to get updates)
+fed-update() {
+  echo "Checking for FrankMD updates..."
+  local image="akitaonrails/frankmd:latest"
+
+  # Get local image digest
+  local local_digest
+  local_digest=$(docker images --digests --format "{{.Digest}}" "$image" 2>/dev/null | head -1)
+
+  # Pull latest and check if it changed
+  docker pull "$image"
+
+  local new_digest
+  new_digest=$(docker images --digests --format "{{.Digest}}" "$image" 2>/dev/null | head -1)
+
+  if [[ "$local_digest" != "$new_digest" ]]; then
+    echo "New version downloaded! Restart FrankMD to use it."
+    # Stop running container so next fed() uses new image
+    docker stop frankmd 2>/dev/null
+    docker rm frankmd 2>/dev/null
+  else
+    echo "Already up to date."
+  fi
 }
 ```
 
