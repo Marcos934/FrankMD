@@ -163,182 +163,53 @@
 
 ## Quick Start
 
-### 1. Set Environment Variables
-
-Add to your `~/.bashrc` or `~/.zshrc` (set only what you need):
+### 1. Setup (one-time)
 
 ```bash
-# ─── FrankMD Configuration ───────────────────────────────────────────────────
-# UI
-export FRANKMD_LOCALE=en                              # en, pt-BR, pt-PT, es, he, ja, ko
+# Pull image and extract config files
+docker pull akitaonrails/frankmd:latest
+docker run --rm -v "$HOME/.config/frankmd:/out" akitaonrails/frankmd:latest \
+  cp -r /rails/config/fed/. /out/
 
-# Local images (browse from your filesystem)
-export IMAGES_PATH=~/Pictures
-
-# S3 image hosting
-export AWS_ACCESS_KEY_ID=your-key
-export AWS_SECRET_ACCESS_KEY=your-secret
-export AWS_S3_BUCKET=your-bucket
-export AWS_REGION=us-east-1
-
-# YouTube video search
-export YOUTUBE_API_KEY=your-key
-
-# Google image search
-export GOOGLE_API_KEY=your-key
-export GOOGLE_CSE_ID=your-cse-id
-
-# AI grammar check - configure one or more (priority: OpenAI > Anthropic > Gemini > OpenRouter > Ollama)
-export OLLAMA_API_BASE=http://host.docker.internal:11434  # use host.docker.internal for Docker
-export OPENROUTER_API_KEY=sk-or-...
-export ANTHROPIC_API_KEY=sk-ant-...
-export GEMINI_API_KEY=...
-export OPENAI_API_KEY=sk-...
-# ─────────────────────────────────────────────────────────────────────────────
+# Add to your shell (bash or zsh)
+echo 'source ~/.config/frankmd/fed.sh' >> ~/.bashrc
+source ~/.bashrc
 ```
 
-### 2. Add the `fed` Function
+### 2. Run
 
 ```bash
-# FrankMD editor function - smart container management with splash screen
-fed() {
-  local uid="${FRANKMD_UID:-$(id -u)}"
-  local gid="${FRANKMD_GID:-$(id -g)}"
-  local notes_path="$(realpath "${1:-.}")"
-  local image="akitaonrails/frankmd:latest"
-
-  # Check if container needs to be started/restarted
-  local need_restart=false
-  if docker ps -q -f name=frankmd 2>/dev/null | grep -q .; then
-    # Container running - check if it's using the same notes path
-    local current_mount
-    current_mount=$(docker inspect frankmd --format '{{range .Mounts}}{{if eq .Destination "/rails/notes"}}{{.Source}}{{end}}{{end}}' 2>/dev/null)
-    if [[ "$current_mount" != "$notes_path" ]]; then
-      need_restart=true
-    fi
-  else
-    need_restart=true
-  fi
-
-  # Start container if needed (runs in background, browser opens in parallel)
-  if [[ "$need_restart" == "true" ]]; then
-    docker stop frankmd 2>/dev/null
-    docker rm frankmd 2>/dev/null
-
-    local args=(-d -p 7591:80 --user "${uid}:${gid}" -v "${notes_path}:/rails/notes")
-
-    [[ -n "$FRANKMD_LOCALE" ]] && args+=(-e "FRANKMD_LOCALE=$FRANKMD_LOCALE")
-    [[ -n "$IMAGES_PATH" ]] && args+=(-v "$(realpath "$IMAGES_PATH"):/rails/images" -e IMAGES_PATH=/rails/images)
-    [[ -n "$AWS_ACCESS_KEY_ID" ]] && args+=(-e "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID")
-    [[ -n "$AWS_SECRET_ACCESS_KEY" ]] && args+=(-e "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY")
-    [[ -n "$AWS_S3_BUCKET" ]] && args+=(-e "AWS_S3_BUCKET=$AWS_S3_BUCKET")
-    [[ -n "$AWS_REGION" ]] && args+=(-e "AWS_REGION=$AWS_REGION")
-    [[ -n "$YOUTUBE_API_KEY" ]] && args+=(-e "YOUTUBE_API_KEY=$YOUTUBE_API_KEY")
-    [[ -n "$GOOGLE_API_KEY" ]] && args+=(-e "GOOGLE_API_KEY=$GOOGLE_API_KEY")
-    [[ -n "$GOOGLE_CSE_ID" ]] && args+=(-e "GOOGLE_CSE_ID=$GOOGLE_CSE_ID")
-    [[ -n "$AI_PROVIDER" ]] && args+=(-e "AI_PROVIDER=$AI_PROVIDER")
-    [[ -n "$AI_MODEL" ]] && args+=(-e "AI_MODEL=$AI_MODEL")
-    [[ -n "$OLLAMA_API_BASE" ]] && args+=(-e "OLLAMA_API_BASE=$OLLAMA_API_BASE")
-    [[ -n "$OLLAMA_MODEL" ]] && args+=(-e "OLLAMA_MODEL=$OLLAMA_MODEL")
-    [[ -n "$OPENROUTER_API_KEY" ]] && args+=(-e "OPENROUTER_API_KEY=$OPENROUTER_API_KEY")
-    [[ -n "$OPENROUTER_MODEL" ]] && args+=(-e "OPENROUTER_MODEL=$OPENROUTER_MODEL")
-    [[ -n "$ANTHROPIC_API_KEY" ]] && args+=(-e "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
-    [[ -n "$ANTHROPIC_MODEL" ]] && args+=(-e "ANTHROPIC_MODEL=$ANTHROPIC_MODEL")
-    [[ -n "$GEMINI_API_KEY" ]] && args+=(-e "GEMINI_API_KEY=$GEMINI_API_KEY")
-    [[ -n "$GEMINI_MODEL" ]] && args+=(-e "GEMINI_MODEL=$GEMINI_MODEL")
-    [[ -n "$OPENAI_API_KEY" ]] && args+=(-e "OPENAI_API_KEY=$OPENAI_API_KEY")
-    [[ -n "$OPENAI_MODEL" ]] && args+=(-e "OPENAI_MODEL=$OPENAI_MODEL")
-
-    docker run --name frankmd --rm "${args[@]}" "$image"
-  fi
-
-  # Always open browser with splash - it polls /up and redirects when ready
-  # This runs in parallel with container/Rails startup for faster perceived load
-  brave --app="data:text/html,$(fed-splash)"
-}
-
-# Splash screen HTML (polls /up endpoint and redirects when ready)
-fed-splash() {
-  cat <<'SPLASH'
-<!DOCTYPE html><html><head><meta charset="utf-8"><title>FrankMD</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:system-ui,sans-serif;background:linear-gradient(135deg,%23FF6B9D 0%25,%23FF8E53 100%25);
-height:100vh;display:flex;align-items:center;justify-content:center;color:white}
-.container{text-align:center}
-.logo{font-size:3rem;font-weight:700;margin-bottom:1rem;text-shadow:0 2px 10px rgba(0,0,0,0.2)}
-.spinner{width:40px;height:40px;margin:1.5rem auto;border:3px solid rgba(255,255,255,0.3);
-border-top-color:white;border-radius:50%25;animation:spin 1s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.status{font-size:0.9rem;opacity:0.9}
-.dots::after{content:'';animation:dots 1.5s steps(4,end) infinite}
-@keyframes dots{0%25,20%25{content:''}40%25{content:'.'}60%25{content:'..'}80%25,100%25{content:'...'}}
-</style></head><body><div class="container">
-<div class="logo">FrankMD</div>
-<div class="spinner"></div>
-<div class="status">Starting<span class="dots"></span></div>
-</div><script>
-(function poll(){fetch('http://localhost:7591/up').then(r=>{
-if(r.ok)window.location.replace('http://localhost:7591/')
-else setTimeout(poll,200)}).catch(()=>setTimeout(poll,200))})()
-</script></body></html>
-SPLASH
-}
-
-# Update FrankMD image (run periodically to get updates)
-fed-update() {
-  echo "Checking for FrankMD updates..."
-  local image="akitaonrails/frankmd:latest"
-
-  # Get local image digest
-  local local_digest
-  local_digest=$(docker images --digests --format "{{.Digest}}" "$image" 2>/dev/null | head -1)
-
-  # Pull latest and check if it changed
-  docker pull "$image"
-
-  local new_digest
-  new_digest=$(docker images --digests --format "{{.Digest}}" "$image" 2>/dev/null | head -1)
-
-  if [[ "$local_digest" != "$new_digest" ]]; then
-    echo "New version downloaded! Restart FrankMD to use it."
-    # Stop running container so next fed() uses new image
-    docker stop frankmd 2>/dev/null
-    docker rm frankmd 2>/dev/null
-  else
-    echo "Already up to date."
-  fi
-}
-```
-
-### 3. Reload and Run
-
-```bash
-source ~/.bashrc  # or ~/.zshrc
-
 fed ~/my-notes    # open a specific directory
 fed .             # open current directory
+fed               # open current directory (same as above)
 ```
 
-To stop: `docker stop frankmd`
+**Available commands:**
+- `fed [path]` - Open FrankMD with notes directory
+- `fed-update` - Check for and download updates
+- `fed-stop` - Stop the container
+
+### 3. Configure API Keys (Optional)
+
+For AI features, image hosting, etc., create an env file:
+
+```bash
+cp ~/.config/frankmd/env.example ~/.config/frankmd/env
+# Edit ~/.config/frankmd/env with your API keys
+
+# Then add to ~/.bashrc:
+export FRANKMD_ENV=~/.config/frankmd/env
+```
 
 ### 4. Using a Different Browser (Optional)
 
-The `fed` function opens Brave by default. To use a different browser, change the last line:
+Set `FRANKMD_BROWSER` in your `~/.bashrc`:
 
 ```bash
-# Chromium
-chromium --app=http://localhost:7591
-
-# Google Chrome
-google-chrome --app=http://localhost:7591
-
-# Microsoft Edge
-microsoft-edge --app=http://localhost:7591
-
-# Firefox (requires about:config → browser.ssb.enabled = true)
-firefox --ssb http://localhost:7591
+export FRANKMD_BROWSER=chromium        # or google-chrome, microsoft-edge, firefox
 ```
+
+For Firefox, enable SSB mode first: `about:config` → `browser.ssb.enabled` = `true`
 
 ### Running in Background
 
