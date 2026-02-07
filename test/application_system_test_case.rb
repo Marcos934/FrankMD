@@ -20,4 +20,18 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
   def teardown
     teardown_test_notes_dir
   end
+
+  private
+
+  # Helper to get the CodeMirror editor content via Stimulus controller
+  def editor_content
+    page.evaluate_script(<<~JS)
+      (function() {
+        var el = document.querySelector('[data-controller~="codemirror"]');
+        if (!el) return null;
+        var ctrl = window.Stimulus.getControllerForElementAndIdentifier(el, 'codemirror');
+        return ctrl ? ctrl.getValue() : null;
+      })()
+    JS
+  end
 end

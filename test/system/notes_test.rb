@@ -33,7 +33,7 @@ class NotesTest < ApplicationSystemTestCase
     find("[data-path='test.md']").click
 
     assert_selector "[data-app-target='currentPath']", text: "test"
-    assert_selector "textarea", visible: true
+    assert_selector ".cm-editor", visible: true
   end
 
   test "creating a new note via dialog" do
@@ -103,9 +103,9 @@ class NotesTest < ApplicationSystemTestCase
     visit root_url
     find("[data-path='editable.md']").click
 
-    # Verify note content is loaded
-    textarea = find("textarea")
-    assert_equal "Original content", textarea.value
+    # Verify note content is loaded in CodeMirror
+    assert_selector ".cm-editor", visible: true
+    assert_equal "Original content", editor_content
   end
 
   test "toggle preview panel" do
@@ -340,10 +340,11 @@ class NotesTest < ApplicationSystemTestCase
     # Dialog should close
     assert_no_selector "dialog[open]"
 
-    # Textarea should contain table markdown
-    textarea = find("textarea")
-    assert_includes textarea.value, "| Name"
-    assert_includes textarea.value, "| ----"  # Separator row
+    # Editor should contain table markdown
+    assert_selector ".cm-editor", visible: true
+    content = editor_content
+    assert_includes content, "| Name"
+    assert_includes content, "| ----"  # Separator row
   end
 
   test "editing existing table in content" do
@@ -360,14 +361,14 @@ class NotesTest < ApplicationSystemTestCase
     visit root_url
     find("[data-path='existing_table.md']").click
 
-    # Position cursor in the table
-    textarea = find("textarea")
-    # Click somewhere in the table area
-    textarea.click
+    # Position cursor in the table via CodeMirror
+    assert_selector ".cm-editor", visible: true
+    # Click somewhere in the editor to focus it
+    find(".cm-content").click
 
-    # Type to position cursor in the table (simulate clicking in table)
-    textarea.send_keys [:control, :end]  # Go to end
-    textarea.send_keys [:up, :up]  # Move up into table
+    # Move cursor into the table area using keyboard
+    find(".cm-content").send_keys [:control, :end]  # Go to end
+    find(".cm-content").send_keys [:up, :up]  # Move up into table
 
     # Wait a moment for cursor position check
     sleep 0.2
@@ -703,10 +704,11 @@ class NotesWithImagesTest < ApplicationSystemTestCase
     # Dialog should close
     assert_no_selector "dialog[open]", wait: 2
 
-    # Textarea should contain image markdown
-    textarea = find("textarea")
-    assert_includes textarea.value, "![photo]"
-    assert_includes textarea.value, "/images/preview/photo.png"
+    # Editor should contain image markdown
+    assert_selector ".cm-editor", visible: true
+    content = editor_content
+    assert_includes content, "![photo]"
+    assert_includes content, "/images/preview/photo.png"
   end
 
   test "inserting image with link wraps in anchor" do
@@ -736,9 +738,10 @@ class NotesWithImagesTest < ApplicationSystemTestCase
     # Dialog should close
     assert_no_selector "dialog[open]", wait: 2
 
-    textarea = find("textarea")
-    assert_includes textarea.value, "[![clickable]"
-    assert_includes textarea.value, "](https://example.com)"
+    assert_selector ".cm-editor", visible: true
+    content = editor_content
+    assert_includes content, "[![clickable]"
+    assert_includes content, "](https://example.com)"
   end
 
   test "inserting image with custom alt text" do
@@ -769,7 +772,8 @@ class NotesWithImagesTest < ApplicationSystemTestCase
     # Dialog should close
     assert_no_selector "dialog[open]", wait: 2
 
-    textarea = find("textarea")
-    assert_includes textarea.value, "![A beautiful sunset]"
+    assert_selector ".cm-editor", visible: true
+    content = editor_content
+    assert_includes content, "![A beautiful sunset]"
   end
 end
