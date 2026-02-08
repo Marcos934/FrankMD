@@ -31,7 +31,7 @@ class YoutubeController < ApplicationController
   private
 
   def youtube_api_key
-    ENV["YOUTUBE_API_KEY"]
+    @youtube_api_key ||= Config.new.get("youtube_api_key")
   end
 
   def search_youtube(query)
