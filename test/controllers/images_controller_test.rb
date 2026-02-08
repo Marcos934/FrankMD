@@ -74,26 +74,19 @@ class ImagesControllerTest < ActionDispatch::IntegrationTest
       @temp_dir = Rails.root.join("tmp", "test_images_#{SecureRandom.hex(8)}")
       FileUtils.mkdir_p(@temp_dir)
 
-      # Store and set config
-      @saved_path = Rails.application.config.frankmd_images.path
-      @saved_enabled = Rails.application.config.frankmd_images.enabled
-      @saved_s3 = Rails.application.config.frankmd_images.s3_enabled
-
-      Rails.application.config.frankmd_images.path = @temp_dir.to_s
-      Rails.application.config.frankmd_images.enabled = true
-      Rails.application.config.frankmd_images.s3_enabled = false
-
-      ImagesService.instance_variable_set(:@images_path, nil)
+      # Stub Config to return our test images path
+      @config_stub = stub("config")
+      @config_stub.stubs(:get).returns(nil)
+      @config_stub.stubs(:get).with("images_path").returns(@temp_dir.to_s)
+      @config_stub.stubs(:feature_available?).returns(false)
+      @config_stub.stubs(:feature_available?).with(:local_images).returns(true)
+      @config_stub.stubs(:feature_available?).with(:s3_upload).returns(false)
+      @config_stub.stubs(:ui_settings).returns({})
+      Config.stubs(:new).returns(@config_stub)
     end
 
     def teardown
       FileUtils.rm_rf(@temp_dir) if @temp_dir&.exist?
-
-      Rails.application.config.frankmd_images.path = @saved_path
-      Rails.application.config.frankmd_images.enabled = @saved_enabled
-      Rails.application.config.frankmd_images.s3_enabled = @saved_s3
-
-      ImagesService.instance_variable_set(:@images_path, nil)
     end
 
     def create_test_image(name)
@@ -299,12 +292,12 @@ class ImagesControllerTest < ActionDispatch::IntegrationTest
   # Tests for disabled state
   class WithImagesDisabled < ActionDispatch::IntegrationTest
     def setup
-      @saved_enabled = Rails.application.config.frankmd_images.enabled
-      Rails.application.config.frankmd_images.enabled = false
-    end
-
-    def teardown
-      Rails.application.config.frankmd_images.enabled = @saved_enabled
+      # Stub Config to return nil for images_path (disabled)
+      @config_stub = stub("config")
+      @config_stub.stubs(:get).returns(nil)
+      @config_stub.stubs(:feature_available?).returns(false)
+      @config_stub.stubs(:ui_settings).returns({})
+      Config.stubs(:new).returns(@config_stub)
     end
 
     test "config returns disabled" do

@@ -1,27 +1,10 @@
 # frozen_string_literal: true
 
-# Images configuration (using frankmd_images to avoid Rails config conflicts)
-Rails.application.config.frankmd_images = ActiveSupport::OrderedOptions.new
-
-# Local images path
-# Priority: IMAGES_PATH env var > XDG_PICTURES_DIR > ~/Pictures (if exists)
-images_path = ENV["IMAGES_PATH"]
-images_path ||= ENV["XDG_PICTURES_DIR"]
-images_path ||= File.expand_path("~/Pictures") if File.directory?(File.expand_path("~/Pictures"))
-
-Rails.application.config.frankmd_images.path = images_path
-
-# AWS S3 configuration
-# Uses standard AWS SDK environment variables automatically
-Rails.application.config.frankmd_images.aws_access_key_id = ENV["AWS_ACCESS_KEY_ID"]
-Rails.application.config.frankmd_images.aws_secret_access_key = ENV["AWS_SECRET_ACCESS_KEY"]
-Rails.application.config.frankmd_images.aws_region = ENV["AWS_REGION"] || ENV["AWS_DEFAULT_REGION"] || "us-east-1"
-Rails.application.config.frankmd_images.aws_s3_bucket = ENV["AWS_S3_BUCKET"]
-
-# Helper flags
-Rails.application.config.frankmd_images.enabled = Rails.application.config.frankmd_images.path.present?
-Rails.application.config.frankmd_images.s3_enabled = [
-  Rails.application.config.frankmd_images.aws_access_key_id,
-  Rails.application.config.frankmd_images.aws_secret_access_key,
-  Rails.application.config.frankmd_images.aws_s3_bucket
-].all?(&:present?)
+# Images path fallback: set IMAGES_PATH from XDG/Pictures if not already set.
+# This runs once at boot so Config.get("images_path") picks it up via ENV fallback.
+# The Config class (.fed file) takes priority over this ENV value.
+unless ENV["IMAGES_PATH"]
+  fallback = ENV["XDG_PICTURES_DIR"]
+  fallback ||= File.expand_path("~/Pictures") if File.directory?(File.expand_path("~/Pictures"))
+  ENV["IMAGES_PATH"] = fallback if fallback
+end

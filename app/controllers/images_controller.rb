@@ -196,7 +196,8 @@ class ImagesController < ApplicationController
   end
 
   def google_api_configured?
-    ENV["GOOGLE_API_KEY"].present? && ENV["GOOGLE_CSE_ID"].present?
+    cfg = Config.new
+    cfg.get("google_api_key").present? && cfg.get("google_cse_id").present?
   end
 
   def parse_resize_ratio(value)
@@ -210,10 +211,11 @@ class ImagesController < ApplicationController
   end
 
   def search_google_images(query, start = 0)
+    cfg = Config.new
     uri = URI("https://www.googleapis.com/customsearch/v1")
     uri.query = URI.encode_www_form(
-      key: ENV["GOOGLE_API_KEY"],
-      cx: ENV["GOOGLE_CSE_ID"],
+      key: cfg.get("google_api_key"),
+      cx: cfg.get("google_cse_id"),
       q: query,
       searchType: "image",
       num: 10,

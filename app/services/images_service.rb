@@ -6,16 +6,21 @@ class ImagesService
 
   class << self
     def enabled?
-      config.enabled
+      resolved_images_path.present?
     end
 
     def s3_enabled?
-      config.s3_enabled
+      cfg = Config.new
+      [
+        cfg.get("aws_access_key_id"),
+        cfg.get("aws_secret_access_key"),
+        cfg.get("aws_s3_bucket")
+      ].all?(&:present?)
     end
 
     def images_path
       return nil unless enabled?
-      @images_path ||= Pathname.new(config.path).expand_path
+      Pathname.new(resolved_images_path).expand_path
     end
 
     def list(search: nil)
@@ -77,10 +82,11 @@ class ImagesService
 
       require "aws-sdk-s3"
 
+      cfg = Config.new
       client = Aws::S3::Client.new(
-        access_key_id: config.aws_access_key_id,
-        secret_access_key: config.aws_secret_access_key,
-        region: config.aws_region
+        access_key_id: cfg.get("aws_access_key_id"),
+        secret_access_key: cfg.get("aws_secret_access_key"),
+        region: cfg.get("aws_region") || "us-east-1"
       )
 
       # Process image if resize ratio provided
@@ -92,12 +98,14 @@ class ImagesService
         filename = full_path.basename.to_s
       end
 
+      bucket = cfg.get("aws_s3_bucket")
+      region = cfg.get("aws_region") || "us-east-1"
       key = "frankmd/#{Time.current.strftime('%Y/%m')}/#{filename}"
 
       # Upload without ACL first (works with buckets that have ACLs disabled)
       begin
         client.put_object(
-          bucket: config.aws_s3_bucket,
+          bucket: bucket,
           key: key,
           body: file_content,
           content_type: content_type
@@ -107,7 +115,7 @@ class ImagesService
         # The object was still uploaded successfully
       end
 
-      "https://#{config.aws_s3_bucket}.s3.#{config.aws_region}.amazonaws.com/#{key}"
+      "https://#{bucket}.s3.#{region}.amazonaws.com/#{key}"
     end
 
     # Upload a file from browser (local folder picker)
@@ -226,17 +234,21 @@ class ImagesService
         end
       end
 
+      cfg = Config.new
+      bucket = cfg.get("aws_s3_bucket")
+      region = cfg.get("aws_region") || "us-east-1"
+
       client = Aws::S3::Client.new(
-        access_key_id: config.aws_access_key_id,
-        secret_access_key: config.aws_secret_access_key,
-        region: config.aws_region
+        access_key_id: cfg.get("aws_access_key_id"),
+        secret_access_key: cfg.get("aws_secret_access_key"),
+        region: region
       )
 
       key = "frankmd/#{Time.current.strftime('%Y/%m')}/#{original_name}"
 
       begin
         client.put_object(
-          bucket: config.aws_s3_bucket,
+          bucket: bucket,
           key: key,
           body: file_content,
           content_type: content_type
@@ -245,13 +257,15 @@ class ImagesService
         # Bucket has ACLs disabled, which is fine
       end
 
-      "https://#{config.aws_s3_bucket}.s3.#{config.aws_region}.amazonaws.com/#{key}"
+      "https://#{bucket}.s3.#{region}.amazonaws.com/#{key}"
     end
 
     private
 
-    def config
-      Rails.application.config.frankmd_images
+    def resolved_images_path
+      # Config handles: .fed file > IMAGES_PATH env > default (nil)
+      # XDG/Pictures fallbacks are handled by the initializer setting IMAGES_PATH
+      Config.new.get("images_path")
     end
 
     def find_images(search)
@@ -383,10 +397,14 @@ class ImagesService
     def upload_temp_to_s3(temp_path, original_filename, resize: nil)
       require "aws-sdk-s3"
 
+      cfg = Config.new
+      bucket = cfg.get("aws_s3_bucket")
+      region = cfg.get("aws_region") || "us-east-1"
+
       client = Aws::S3::Client.new(
-        access_key_id: config.aws_access_key_id,
-        secret_access_key: config.aws_secret_access_key,
-        region: config.aws_region
+        access_key_id: cfg.get("aws_access_key_id"),
+        secret_access_key: cfg.get("aws_secret_access_key"),
+        region: region
       )
 
       # Process image if resize ratio provided
@@ -402,7 +420,7 @@ class ImagesService
 
       begin
         client.put_object(
-          bucket: config.aws_s3_bucket,
+          bucket: bucket,
           key: key,
           body: file_content,
           content_type: content_type
@@ -411,7 +429,7 @@ class ImagesService
         # Bucket has ACLs disabled, which is fine
       end
 
-      { url: "https://#{config.aws_s3_bucket}.s3.#{config.aws_region}.amazonaws.com/#{key}" }
+      { url: "https://#{bucket}.s3.#{region}.amazonaws.com/#{key}" }
     end
   end
 end

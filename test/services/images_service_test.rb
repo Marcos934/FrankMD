@@ -4,34 +4,19 @@ require "test_helper"
 
 class ImagesServiceTest < ActiveSupport::TestCase
   def setup
-    # Store original config
-    @original_config = {
-      path: Rails.application.config.frankmd_images.path,
-      enabled: Rails.application.config.frankmd_images.enabled
-    }
-
     # Create temp directory for images
     @temp_dir = Rails.root.join("tmp", "test_images_#{SecureRandom.hex(8)}")
     FileUtils.mkdir_p(@temp_dir)
 
-    # Configure images path
-    Rails.application.config.frankmd_images.path = @temp_dir.to_s
-    Rails.application.config.frankmd_images.enabled = true
-
-    # Clear memoized path
-    ImagesService.instance_variable_set(:@images_path, nil)
+    # Stub Config to return our test images path
+    @config_stub = stub("config")
+    @config_stub.stubs(:get).returns(nil)
+    @config_stub.stubs(:get).with("images_path").returns(@temp_dir.to_s)
+    Config.stubs(:new).returns(@config_stub)
   end
 
   def teardown
     FileUtils.rm_rf(@temp_dir) if @temp_dir&.exist?
-
-    # Restore original config
-    if @original_config
-      Rails.application.config.frankmd_images.path = @original_config[:path]
-      Rails.application.config.frankmd_images.enabled = @original_config[:enabled]
-    end
-
-    ImagesService.instance_variable_set(:@images_path, nil)
   end
 
   def create_test_image(name, content = "fake image data")
@@ -50,14 +35,14 @@ class ImagesServiceTest < ActiveSupport::TestCase
   end
 
   test "enabled? returns false when path is not set" do
-    Rails.application.config.frankmd_images.enabled = false
+    @config_stub.stubs(:get).with("images_path").returns(nil)
     refute ImagesService.enabled?
   end
 
   # === list ===
 
   test "list returns empty array when disabled" do
-    Rails.application.config.frankmd_images.enabled = false
+    @config_stub.stubs(:get).with("images_path").returns(nil)
     assert_equal [], ImagesService.list
   end
 
@@ -310,44 +295,22 @@ class ImagesServiceS3Test < ActiveSupport::TestCase
   require "aws-sdk-s3"
 
   def setup
-    @original_config = {
-      path: Rails.application.config.frankmd_images.path,
-      enabled: Rails.application.config.frankmd_images.enabled,
-      s3_enabled: Rails.application.config.frankmd_images.s3_enabled,
-      aws_access_key_id: Rails.application.config.frankmd_images.aws_access_key_id,
-      aws_secret_access_key: Rails.application.config.frankmd_images.aws_secret_access_key,
-      aws_region: Rails.application.config.frankmd_images.aws_region,
-      aws_s3_bucket: Rails.application.config.frankmd_images.aws_s3_bucket
-    }
-
     @temp_dir = Rails.root.join("tmp", "test_images_s3_#{SecureRandom.hex(8)}")
     FileUtils.mkdir_p(@temp_dir)
 
-    Rails.application.config.frankmd_images.path = @temp_dir.to_s
-    Rails.application.config.frankmd_images.enabled = true
-    Rails.application.config.frankmd_images.s3_enabled = true
-    Rails.application.config.frankmd_images.aws_access_key_id = "test-key-id"
-    Rails.application.config.frankmd_images.aws_secret_access_key = "test-secret"
-    Rails.application.config.frankmd_images.aws_region = "us-east-1"
-    Rails.application.config.frankmd_images.aws_s3_bucket = "test-bucket"
-
-    ImagesService.instance_variable_set(:@images_path, nil)
+    # Stub Config to return our test values
+    @config_stub = stub("config")
+    @config_stub.stubs(:get).returns(nil)
+    @config_stub.stubs(:get).with("images_path").returns(@temp_dir.to_s)
+    @config_stub.stubs(:get).with("aws_access_key_id").returns("test-key-id")
+    @config_stub.stubs(:get).with("aws_secret_access_key").returns("test-secret")
+    @config_stub.stubs(:get).with("aws_region").returns("us-east-1")
+    @config_stub.stubs(:get).with("aws_s3_bucket").returns("test-bucket")
+    Config.stubs(:new).returns(@config_stub)
   end
 
   def teardown
     FileUtils.rm_rf(@temp_dir) if @temp_dir&.exist?
-
-    if @original_config
-      Rails.application.config.frankmd_images.path = @original_config[:path]
-      Rails.application.config.frankmd_images.enabled = @original_config[:enabled]
-      Rails.application.config.frankmd_images.s3_enabled = @original_config[:s3_enabled]
-      Rails.application.config.frankmd_images.aws_access_key_id = @original_config[:aws_access_key_id]
-      Rails.application.config.frankmd_images.aws_secret_access_key = @original_config[:aws_secret_access_key]
-      Rails.application.config.frankmd_images.aws_region = @original_config[:aws_region]
-      Rails.application.config.frankmd_images.aws_s3_bucket = @original_config[:aws_s3_bucket]
-    end
-
-    ImagesService.instance_variable_set(:@images_path, nil)
   end
 
   def create_test_image(name, content = "fake image data")
@@ -362,12 +325,12 @@ class ImagesServiceS3Test < ActiveSupport::TestCase
   end
 
   test "s3_enabled? returns false when not configured" do
-    Rails.application.config.frankmd_images.s3_enabled = false
+    @config_stub.stubs(:get).with("aws_access_key_id").returns(nil)
     refute ImagesService.s3_enabled?
   end
 
   test "upload_to_s3 returns nil when s3 disabled" do
-    Rails.application.config.frankmd_images.s3_enabled = false
+    @config_stub.stubs(:get).with("aws_access_key_id").returns(nil)
     create_test_image("test.jpg")
 
     result = ImagesService.upload_to_s3("test.jpg")
@@ -434,7 +397,7 @@ class ImagesServiceS3Test < ActiveSupport::TestCase
   end
 
   test "download_and_upload_to_s3 returns nil when s3 disabled" do
-    Rails.application.config.frankmd_images.s3_enabled = false
+    @config_stub.stubs(:get).with("aws_access_key_id").returns(nil)
 
     result = ImagesService.download_and_upload_to_s3("https://example.com/image.jpg")
 

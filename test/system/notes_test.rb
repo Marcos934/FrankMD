@@ -543,8 +543,8 @@ class NotesTest < ApplicationSystemTestCase
   test "image button is always visible for web search access" do
     # Even without local images configured, button should be visible
     # because web search and Pinterest are always available
-    original_enabled = Rails.application.config.frankmd_images.enabled
-    Rails.application.config.frankmd_images.enabled = false
+    original_images_path = ENV["IMAGES_PATH"]
+    ENV["IMAGES_PATH"] = ""
 
     create_test_note("img_test.md", "# Test")
 
@@ -556,8 +556,8 @@ class NotesTest < ApplicationSystemTestCase
 
     # Image button should be visible (web search always available)
     assert_selector "button[title='Insert Image']"
-
-    Rails.application.config.frankmd_images.enabled = original_enabled
+  ensure
+    ENV["IMAGES_PATH"] = original_images_path
   end
 end
 
@@ -573,22 +573,16 @@ class NotesWithImagesTest < ApplicationSystemTestCase
   end
 
   def setup_test_images_dir
-    @original_path = Rails.application.config.frankmd_images.path
-    @original_enabled = Rails.application.config.frankmd_images.enabled
-
     @test_images_dir = Rails.root.join("tmp", "test_images_#{SecureRandom.hex(4)}")
     FileUtils.mkdir_p(@test_images_dir)
 
-    Rails.application.config.frankmd_images.path = @test_images_dir.to_s
-    Rails.application.config.frankmd_images.enabled = true
-    ImagesService.instance_variable_set(:@images_path, nil)
+    @original_images_path = ENV["IMAGES_PATH"]
+    ENV["IMAGES_PATH"] = @test_images_dir.to_s
   end
 
   def teardown_test_images_dir
     FileUtils.rm_rf(@test_images_dir) if @test_images_dir&.exist?
-    Rails.application.config.frankmd_images.path = @original_path
-    Rails.application.config.frankmd_images.enabled = @original_enabled
-    ImagesService.instance_variable_set(:@images_path, nil)
+    ENV["IMAGES_PATH"] = @original_images_path
   end
 
   def create_test_image(name)
