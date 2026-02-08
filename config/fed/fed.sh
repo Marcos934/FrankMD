@@ -24,7 +24,6 @@ fed() {
     # Forward host env vars if set (Config .fed file still overrides these)
     local env_flags=()
     local env_vars=(
-      IMAGES_PATH
       AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_S3_BUCKET AWS_REGION
       YOUTUBE_API_KEY
       GOOGLE_API_KEY GOOGLE_CSE_ID
@@ -38,16 +37,16 @@ fed() {
       FRANKMD_LOCALE
     )
     for var in "${env_vars[@]}"; do
-      local val
-      val="$(printenv "$var" 2>/dev/null)" || true
-      [[ -n "$val" ]] && env_flags+=(-e "$var=$val")
+      if printenv "$var" >/dev/null 2>&1; then
+        env_flags+=(-e "$var=$(printenv "$var")")
+      fi
     done
 
     # Detect images directory to mount into container
     # Check: IMAGES_PATH env > .fed file > XDG_PICTURES_DIR > ~/Pictures
     local images_dir="${IMAGES_PATH:-}"
     if [[ -z "$images_dir" && -f "$notes/.fed" ]]; then
-      images_dir=$(grep -m1 '^images_path=' "$notes/.fed" | cut -d'=' -f2-)
+      images_dir=$(grep -m1 '^images_path\s*=' "$notes/.fed" | sed 's/^[^=]*=\s*//' | sed 's/^["'\'']\|["'\'']\s*$//g')
       images_dir="${images_dir/#\~/$HOME}"
     fi
     if [[ -z "$images_dir" ]]; then
@@ -57,13 +56,16 @@ fed() {
       images_dir="$HOME/Pictures"
     fi
 
-    # Mount images directory at the same host path (read-only)
+    # Mount images directory into container at a fixed path (read-only)
     local images_mount=()
     if [[ -n "$images_dir" && -d "$images_dir" ]]; then
       images_dir="$(realpath "$images_dir")"
-      images_mount=(-v "$images_dir:$images_dir:ro")
-      # Ensure container knows the path (covers default ~/Pictures case)
-      [[ -z "${IMAGES_PATH:-}" ]] && env_flags+=(-e "IMAGES_PATH=$images_dir")
+      images_mount=(--mount "type=bind,source=$images_dir,target=/data/images,readonly")
+      # Override IMAGES_PATH inside container to match the mount point
+      env_flags+=(-e "IMAGES_PATH=/data/images")
+      echo "[fed] Mounting images: $images_dir -> /data/images"
+    else
+      echo "[fed] Warning: no images directory found (IMAGES_PATH not set, no ~/Pictures)"
     fi
 
     docker run -d --name frankmd --rm \
