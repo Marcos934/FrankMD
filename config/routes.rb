@@ -47,6 +47,7 @@ Rails.application.routes.draw do
 
   # Logs API (for debugging)
   get "logs/tail", to: "logs#tail"
+  get "logs/config", to: "logs#config"
 
   # Health check (with CORS for splash screen polling)
   get "up" => "health#show", as: :rails_health_check

@@ -15,9 +15,13 @@ describe("LogViewerController", () => {
     document.body.innerHTML = `
       <div data-controller="log-viewer">
         <dialog data-log-viewer-target="dialog">
+          <h2 data-log-viewer-target="title">Rails Log</h2>
           <div data-log-viewer-target="environment"></div>
           <div data-log-viewer-target="status"></div>
+          <button data-log-viewer-target="tabLogs" data-action="click->log-viewer#showLogs">Logs</button>
+          <button data-log-viewer-target="tabConfig" data-action="click->log-viewer#showConfig">Config</button>
           <pre data-log-viewer-target="content"></pre>
+          <div data-log-viewer-target="configContent" class="hidden"></div>
         </dialog>
       </div>
     `
@@ -70,6 +74,17 @@ describe("LogViewerController", () => {
       controller.open()
 
       expect(content.textContent).toBe("Loading...")
+    })
+
+    it("defaults to logs tab", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ environment: "test", file: "test.log", lines: ["line1"] })
+      })
+
+      await controller.open()
+
+      expect(controller.activeTab).toBe("logs")
     })
   })
 
@@ -175,6 +190,178 @@ describe("LogViewerController", () => {
     })
   })
 
+  describe("fetchConfig", () => {
+    it("fetches config from server", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          config_file: "/notes/.fed",
+          config_file_exists: true,
+          ai_configured_in_file: false,
+          environment: "test",
+          entries: [
+            { key: "theme", value: "dark", source: "file", env_var: null, sensitive: false }
+          ]
+        })
+      })
+
+      await controller.fetchConfig()
+
+      expect(global.fetch).toHaveBeenCalledWith("/logs/config", expect.any(Object))
+    })
+
+    it("displays config entries in table", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          config_file: "/notes/.fed",
+          config_file_exists: true,
+          ai_configured_in_file: false,
+          environment: "test",
+          entries: [
+            { key: "theme", value: "dark", source: "file", env_var: null, sensitive: false },
+            { key: "locale", value: "en", source: "default", env_var: "FRANKMD_LOCALE", sensitive: false }
+          ]
+        })
+      })
+      const configContent = container.querySelector('[data-log-viewer-target="configContent"]')
+
+      await controller.fetchConfig()
+
+      expect(configContent.innerHTML).toContain("theme")
+      expect(configContent.innerHTML).toContain("dark")
+      expect(configContent.innerHTML).toContain(".fed")
+      expect(configContent.innerHTML).toContain("default")
+    })
+
+    it("shows key count in status", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          config_file: "/notes/.fed",
+          config_file_exists: true,
+          ai_configured_in_file: false,
+          environment: "test",
+          entries: [
+            { key: "theme", value: null, source: "default", env_var: null, sensitive: false },
+            { key: "locale", value: "en", source: "default", env_var: "FRANKMD_LOCALE", sensitive: false }
+          ]
+        })
+      })
+      const status = container.querySelector('[data-log-viewer-target="status"]')
+
+      await controller.fetchConfig()
+
+      expect(status.textContent).toBe("2 keys")
+    })
+
+    it("handles fetch errors gracefully", async () => {
+      global.fetch = vi.fn().mockRejectedValue(new Error("Network error"))
+      const configContent = container.querySelector('[data-log-viewer-target="configContent"]')
+
+      await controller.fetchConfig()
+
+      expect(configContent.textContent).toContain("Error loading config")
+    })
+  })
+
+  describe("tab switching", () => {
+    it("showLogs reveals log content and hides config", () => {
+      const content = container.querySelector('[data-log-viewer-target="content"]')
+      const configContent = container.querySelector('[data-log-viewer-target="configContent"]')
+
+      // First switch to config
+      content.classList.add("hidden")
+      configContent.classList.remove("hidden")
+
+      controller.showLogs()
+
+      expect(content.classList.contains("hidden")).toBe(false)
+      expect(configContent.classList.contains("hidden")).toBe(true)
+      expect(controller.activeTab).toBe("logs")
+    })
+
+    it("showConfig reveals config content and hides logs", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          config_file: "/notes/.fed",
+          config_file_exists: true,
+          ai_configured_in_file: false,
+          environment: "test",
+          entries: []
+        })
+      })
+      const content = container.querySelector('[data-log-viewer-target="content"]')
+      const configContent = container.querySelector('[data-log-viewer-target="configContent"]')
+
+      await controller.showConfig()
+
+      expect(content.classList.contains("hidden")).toBe(true)
+      expect(configContent.classList.contains("hidden")).toBe(false)
+      expect(controller.activeTab).toBe("config")
+    })
+
+    it("showConfig updates title", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          config_file: "/notes/.fed",
+          config_file_exists: true,
+          ai_configured_in_file: false,
+          environment: "test",
+          entries: []
+        })
+      })
+      const title = container.querySelector('[data-log-viewer-target="title"]')
+
+      await controller.showConfig()
+
+      expect(title.textContent).toBe("Configuration")
+    })
+
+    it("showLogs updates title", () => {
+      const title = container.querySelector('[data-log-viewer-target="title"]')
+      title.textContent = "Configuration"
+
+      controller.showLogs()
+
+      expect(title.textContent).toBe("Rails Log")
+    })
+  })
+
+  describe("refresh", () => {
+    it("refreshes logs when on logs tab", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ environment: "test", file: "test.log", lines: ["new line"] })
+      })
+      controller.activeTab = "logs"
+
+      await controller.refresh()
+
+      expect(global.fetch).toHaveBeenCalledWith("/logs/tail?lines=100", expect.any(Object))
+    })
+
+    it("refreshes config when on config tab", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          config_file: "/notes/.fed",
+          config_file_exists: true,
+          ai_configured_in_file: false,
+          environment: "test",
+          entries: []
+        })
+      })
+      controller.activeTab = "config"
+
+      await controller.refresh()
+
+      expect(global.fetch).toHaveBeenCalledWith("/logs/config", expect.any(Object))
+    })
+  })
+
   describe("close", () => {
     it("closes the dialog", () => {
       const dialog = container.querySelector('[data-log-viewer-target="dialog"]')
@@ -182,22 +369,6 @@ describe("LogViewerController", () => {
       controller.close()
 
       expect(dialog.close).toHaveBeenCalled()
-    })
-  })
-
-  describe("refresh", () => {
-    it("shows loading and fetches logs again", async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ environment: "test", file: "test.log", lines: ["new line"] })
-      })
-      const fetchSpy = vi.spyOn(controller, "fetchLogs")
-      const loadingSpy = vi.spyOn(controller, "showLoading")
-
-      await controller.refresh()
-
-      expect(loadingSpy).toHaveBeenCalled()
-      expect(fetchSpy).toHaveBeenCalled()
     })
   })
 

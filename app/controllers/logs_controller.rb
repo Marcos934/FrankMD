@@ -24,7 +24,51 @@ class LogsController < ApplicationController
     }
   end
 
+  # GET /logs/config
+  # Returns all config keys with resolved values and their source
+  def config
+    cfg = Config.new
+    entries = Config::SCHEMA.keys.map do |key|
+      schema = Config::SCHEMA[key]
+      value = cfg.get(key)
+      source = config_source(cfg, key, schema)
+      sensitive = Config::SENSITIVE_KEYS.include?(key)
+
+      {
+        key: key,
+        value: sensitive && value.present? ? mask_value(value) : value,
+        source: source,
+        env_var: schema[:env],
+        sensitive: sensitive
+      }
+    end
+
+    render json: {
+      config_file: cfg.config_file_path.to_s,
+      config_file_exists: cfg.config_file_path.exist?,
+      ai_configured_in_file: cfg.ai_configured_in_file?,
+      environment: Rails.env,
+      entries: entries
+    }
+  end
+
   private
+
+  def config_source(cfg, key, schema)
+    if cfg.values.key?(key)
+      "file"
+    elsif schema[:env] && ENV[schema[:env]].present?
+      "env"
+    else
+      "default"
+    end
+  end
+
+  def mask_value(value)
+    s = value.to_s
+    return s if s.length <= 8
+    "#{s[0..3]}#{"*" * [s.length - 8, 4].max}#{s[-4..]}"
+  end
 
   def tail_file(path, num_lines)
     lines = []

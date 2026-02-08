@@ -94,6 +94,69 @@ class LogsControllerTest < ActionDispatch::IntegrationTest
     assert_instance_of Array, data["lines"]
   end
 
+  # -- Config endpoint tests --
+
+  test "config returns JSON with config file info and entries" do
+    get logs_config_url, as: :json
+    assert_response :success
+
+    data = JSON.parse(response.body)
+    assert data.key?("config_file")
+    assert data.key?("config_file_exists")
+    assert data.key?("ai_configured_in_file")
+    assert_equal Rails.env, data["environment"]
+    assert_instance_of Array, data["entries"]
+  end
+
+  test "config entries include all SCHEMA keys" do
+    get logs_config_url, as: :json
+    data = JSON.parse(response.body)
+
+    keys = data["entries"].map { |e| e["key"] }
+    Config::SCHEMA.keys.each do |schema_key|
+      assert_includes keys, schema_key, "Missing config key: #{schema_key}"
+    end
+  end
+
+  test "config entries have expected fields" do
+    get logs_config_url, as: :json
+    data = JSON.parse(response.body)
+
+    entry = data["entries"].first
+    assert entry.key?("key")
+    assert entry.key?("value")
+    assert entry.key?("source")
+    assert entry.key?("env_var")
+    assert entry.key?("sensitive")
+    assert_includes %w[file env default], entry["source"]
+  end
+
+  test "config masks sensitive values" do
+    get logs_config_url, as: :json
+    data = JSON.parse(response.body)
+
+    sensitive_entries = data["entries"].select { |e| e["sensitive"] }
+    sensitive_entries.each do |entry|
+      next if entry["value"].nil?
+      # Masked values should contain asterisks
+      assert_match(/\*/, entry["value"], "Sensitive key #{entry['key']} should be masked")
+    end
+  end
+
+  test "config source reflects ENV when ENV is set" do
+    ENV["YOUTUBE_API_KEY"] = "test-yt-key-12345678"
+    begin
+      get logs_config_url, as: :json
+      data = JSON.parse(response.body)
+
+      yt_entry = data["entries"].find { |e| e["key"] == "youtube_api_key" }
+      # Source should be env (unless overridden by .fed file)
+      assert_includes %w[file env], yt_entry["source"]
+    ensure
+      ENV.delete("YOUTUBE_API_KEY")
+    end
+  end
+
   test "tail returns lines as array of strings" do
     # Write some content
     lines = [ "Line A", "Line B", "Line C" ]
