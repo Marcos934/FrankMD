@@ -87,9 +87,8 @@ fed() {
       images_mount=(--mount "type=bind,source=$images_dir,target=/data/images,readonly")
       # Override IMAGES_PATH inside container to match the mount point
       env_flags+=(-e "IMAGES_PATH=/data/images")
-      echo "[fed] Mounting images: $images_dir -> /data/images"
     else
-      echo "[fed] Warning: no images directory found (IMAGES_PATH not set, no ~/Pictures)"
+      echo "[fed] Warning: no images directory found (set IMAGES_PATH or create ~/Pictures)"
     fi
 
     docker run -d --name frankmd --rm \
@@ -115,8 +114,8 @@ fed() {
   # Open browser with splash (polls until Rails is ready)
   local url="file://$splash"
   case "$browser" in
-    firefox*) "$browser" --ssb="$url" ;;
-    *)        "$browser" --app="$url" ;;
+    firefox*) "$browser" --ssb="$url" >/dev/null 2>&1 & disown ;;
+    *)        "$browser" --app="$url" >/dev/null 2>&1 & disown ;;
   esac
 }
 
