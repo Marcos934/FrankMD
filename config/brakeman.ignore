@@ -3,10 +3,6 @@
     {
       "fingerprint": "0ff1a8a8c032e888442f52d52b17d0bf3617a916cdb8401d84c8cc1f1ad849c4",
       "note": "Path validated by ImagesService.safe_path which prevents traversal"
-    },
-    {
-      "fingerprint": "781129958f53fd0e88742ed41006daa83c60fd8e155685f4686728523c1bab74",
-      "note": "Array form of Open3.capture3 prevents shell injection; source_path validated by safe_path"
     }
   ],
   "updated": "2026-02-10",
