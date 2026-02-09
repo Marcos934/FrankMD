@@ -720,4 +720,112 @@ describe("TextFormatController", () => {
       expect(controller.menuTarget.classList.contains("hidden")).toBe(true)
     })
   })
+
+  describe("applyFormatToEditor()", () => {
+    let mockCm
+
+    beforeEach(() => {
+      mockCm = {
+        getValue: vi.fn(() => "Hello World"),
+        replaceRange: vi.fn(),
+        setSelection: vi.fn(),
+        focus: vi.fn(),
+        getSelection: vi.fn(() => ({ from: 0, to: 5, text: "Hello" })),
+      }
+    })
+
+    it("wraps selected text with format markers", () => {
+      const format = { prefix: "**", suffix: "**" }
+      const selectionData = { start: 0, end: 5, text: "Hello" }
+
+      controller.applyFormatToEditor(format, selectionData, mockCm)
+
+      expect(mockCm.replaceRange).toHaveBeenCalledWith("**Hello**", 0, 5)
+      expect(mockCm.focus).toHaveBeenCalled()
+    })
+
+    it("unwraps when selection includes markers (toggle)", () => {
+      const format = { prefix: "**", suffix: "**" }
+      const selectionData = { start: 0, end: 9, text: "**Hello**" }
+
+      controller.applyFormatToEditor(format, selectionData, mockCm)
+
+      expect(mockCm.replaceRange).toHaveBeenCalledWith("Hello", 0, 9)
+      expect(mockCm.setSelection).toHaveBeenCalledWith(0, 5)
+    })
+
+    it("unwraps when markers are outside selection (toggle)", () => {
+      mockCm.getValue.mockReturnValue("**Hello** World")
+      const format = { prefix: "**", suffix: "**" }
+      const selectionData = { start: 2, end: 7, text: "Hello" }
+
+      controller.applyFormatToEditor(format, selectionData, mockCm)
+
+      expect(mockCm.replaceRange).toHaveBeenCalledWith("Hello", 0, 9)
+      expect(mockCm.setSelection).toHaveBeenCalledWith(0, 5)
+    })
+
+    it("positions cursor at url for link format", () => {
+      const format = { prefix: "[", suffix: "](url)" }
+      const selectionData = { start: 0, end: 5, text: "Hello" }
+
+      controller.applyFormatToEditor(format, selectionData, mockCm)
+
+      expect(mockCm.replaceRange).toHaveBeenCalledWith("[Hello](url)", 0, 5)
+      // urlStart = 0 + 1 + 5 + 2 = 8, urlEnd = 8 + 3 = 11
+      expect(mockCm.setSelection).toHaveBeenCalledWith(8, 11)
+    })
+
+    it("does nothing when format is null", () => {
+      controller.applyFormatToEditor(null, { start: 0, end: 5, text: "Hello" }, mockCm)
+      expect(mockCm.replaceRange).not.toHaveBeenCalled()
+    })
+
+    it("does nothing when selectionData is null", () => {
+      controller.applyFormatToEditor({ prefix: "**", suffix: "**" }, null, mockCm)
+      expect(mockCm.replaceRange).not.toHaveBeenCalled()
+    })
+  })
+
+  describe("onContextMenu()", () => {
+    let mockCm
+
+    beforeEach(() => {
+      mockCm = {
+        getSelection: vi.fn(() => ({ from: 0, to: 5, text: "Hello" })),
+      }
+    })
+
+    it("opens menu when text is selected", () => {
+      // Set up a textarea for the adapter
+      const textarea = document.createElement("textarea")
+      textarea.value = "Hello World"
+      textarea.setSelectionRange(0, 5)
+      textarea.setAttribute("data-app-target", "textarea")
+      document.body.appendChild(textarea)
+
+      const event = { clientX: 100, clientY: 200, preventDefault: vi.fn() }
+
+      controller.onContextMenu(event, mockCm, true)
+
+      expect(event.preventDefault).toHaveBeenCalled()
+      textarea.remove()
+    })
+
+    it("does not open when no text is selected", () => {
+      mockCm.getSelection.mockReturnValue({ from: 5, to: 5, text: "" })
+
+      const event = { clientX: 100, clientY: 200, preventDefault: vi.fn() }
+      controller.onContextMenu(event, mockCm, true)
+
+      expect(event.preventDefault).not.toHaveBeenCalled()
+    })
+
+    it("does not open when not markdown", () => {
+      const event = { clientX: 100, clientY: 200, preventDefault: vi.fn() }
+      controller.onContextMenu(event, mockCm, false)
+
+      expect(event.preventDefault).not.toHaveBeenCalled()
+    })
+  })
 })

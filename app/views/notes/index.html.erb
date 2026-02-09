@@ -1,6 +1,6 @@
 <div class="h-screen w-full flex flex-col bg-[var(--theme-bg-primary)] text-[var(--theme-text-primary)]"
-     data-controller="app connection-monitor typewriter"
-     data-action="connection-monitor:offline->app#onConnectionLost connection-monitor:online->app#onConnectionRestored typewriter:toggled->app#onTypewriterToggled"
+     data-controller="app autosave scroll-sync connection-monitor typewriter"
+     data-action="connection-monitor:offline->autosave#onConnectionLost connection-monitor:online->autosave#onConnectionRestored autosave:config-saved->app#onAutosaveConfigSaved autosave:offline-changed->app#onAutosaveOfflineChanged typewriter:toggled->app#onTypewriterToggled typewriter:toggled->scroll-sync#onTypewriterToggled"
      data-app-tree-value="<%= @tree.to_json %>"
      data-app-initial-path-value="<%= @initial_path.to_json %>"
      data-app-initial-note-value="<%= (@initial_note || {}).to_json %>"
@@ -17,11 +17,11 @@
 
   <!-- Content Loss Warning Banner -->
   <%= render "shared/warning_banner",
-      target_attr: 'data-app-target="contentLossBanner"',
+      target_attr: 'data-autosave-target="contentLossBanner"',
       message: t('status.content_loss_warning'),
       buttons: [
-        { label: t('status.undo'), action: "click->app#undoContentLoss" },
-        { label: t('status.save_anyway'), action: "click->app#saveAnywayAfterWarning" }
+        { label: t('status.undo'), action: "click->autosave#undoContentLoss" },
+        { label: t('status.save_anyway'), action: "click->autosave#saveAnywayAfterWarning" }
       ] %>
 
   <%= render "notes/header" %>

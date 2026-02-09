@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { Application } from "@hotwired/stimulus"
 
 // Mock @codemirror/commands before importing the controller
@@ -9,62 +9,9 @@ vi.mock("@codemirror/commands", () => ({
   undo: vi.fn()
 }))
 
-// Mock lib imports that the controller uses at module level
-vi.mock("lib/marked_extensions", () => ({
-  allExtensions: []
-}))
+import AutosaveController from "../../../app/javascript/controllers/autosave_controller"
 
-vi.mock("lib/codemirror_content_insertion", () => ({
-  insertBlockContent: vi.fn(),
-  insertInlineContent: vi.fn(),
-  insertImage: vi.fn(),
-  insertCodeBlock: vi.fn(),
-  insertVideoEmbed: vi.fn()
-}))
-
-vi.mock("lib/codemirror_adapter", () => ({
-  createTextareaAdapter: vi.fn(),
-  getEditorContent: vi.fn((cm, ta) => cm ? cm.getValue() : "")
-}))
-
-vi.mock("lib/keyboard_shortcuts", () => ({
-  DEFAULT_SHORTCUTS: {},
-  createKeyHandler: vi.fn(() => vi.fn()),
-  mergeShortcuts: vi.fn(() => ({}))
-}))
-
-vi.mock("lib/line_numbers", () => ({
-  LINE_NUMBER_MODES: { OFF: "off", ON: "on", RELATIVE: "relative" },
-  normalizeLineNumberMode: vi.fn((val, def) => val || def)
-}))
-
-vi.mock("lib/indent_utils", () => ({
-  parseIndentSetting: vi.fn(() => "  ")
-}))
-
-vi.mock("lib/tree_utils", () => ({
-  flattenTree: vi.fn(() => [])
-}))
-
-import AppController from "../../../app/javascript/controllers/app_controller"
-
-// Suppress jsdom HTMLBaseElement.get href errors from Stimulus Application.start()
-// This is a known jsdom compatibility issue that doesn't affect test correctness
-const originalListeners = process.listeners("unhandledRejection")
-beforeAll(() => {
-  process.removeAllListeners("unhandledRejection")
-  process.on("unhandledRejection", (err) => {
-    if (err?.message?.includes("HTMLBaseElement")) return
-    // Re-throw non-jsdom errors
-    throw err
-  })
-})
-afterAll(() => {
-  process.removeAllListeners("unhandledRejection")
-  originalListeners.forEach((listener) => process.on("unhandledRejection", listener))
-})
-
-describe("AppController — Content Loss Detection", () => {
+describe("AutosaveController — Content Loss Detection", () => {
   let application
   let container
   let controller
@@ -75,15 +22,6 @@ describe("AppController — Content Loss Detection", () => {
     setValue: vi.fn(),
     focus: vi.fn(),
     getEditorView: vi.fn(() => ({})),
-    getCursorPosition: vi.fn(() => ({ offset: 0 })),
-    getCursorInfo: vi.fn(() => ({ line: 1, col: 1 })),
-    setFontFamily: vi.fn(),
-    setFontSize: vi.fn(),
-    setLineNumberMode: vi.fn(),
-    setEnabled: vi.fn(),
-    maintainTypewriterScroll: vi.fn(),
-    getScrollRatio: vi.fn(() => 0),
-    getSelection: vi.fn(() => ({ from: 0, to: 0, text: "" })),
   }
 
   beforeEach(async () => {
@@ -96,45 +34,26 @@ describe("AppController — Content Loss Detection", () => {
     // Mock window.t
     window.t = vi.fn().mockReturnValue("")
 
-    // Mock window.history methods for jsdom compatibility
-    window.history.pushState = vi.fn()
-    window.history.replaceState = vi.fn()
-
-    // Setup minimal DOM with only the targets needed for content loss detection
+    // Setup minimal DOM with only the targets needed for autosave
     document.body.innerHTML = `
-      <div data-controller="app"
-           data-app-tree-value="[]"
-           data-app-config-value="{}">
-        <div data-app-target="contentLossBanner" class="hidden"></div>
-        <div data-app-target="saveStatus" class="hidden"></div>
-        <textarea data-app-target="textarea"></textarea>
-        <div data-app-target="editor" class="hidden"></div>
-        <div data-app-target="editorPlaceholder"></div>
-        <div data-app-target="currentPath"></div>
-        <div data-app-target="editorToolbar" class="hidden"></div>
-        <div data-app-target="fileTree"></div>
-        <div data-app-target="tableHint" class="hidden"></div>
+      <div data-controller="autosave">
+        <div data-autosave-target="contentLossBanner" class="hidden"></div>
+        <span data-autosave-target="saveStatus" class="hidden"></span>
       </div>
     `
 
-    container = document.querySelector('[data-controller="app"]')
+    container = document.querySelector('[data-controller="autosave"]')
 
     // Setup Stimulus
     application = Application.start()
-    application.register("app", AppController)
+    application.register("autosave", AutosaveController)
 
     // Wait for Stimulus to initialize
     await new Promise((resolve) => setTimeout(resolve, 10))
-    controller = application.getControllerForElementAndIdentifier(container, "app")
+    controller = application.getControllerForElementAndIdentifier(container, "autosave")
 
     // Override getCodemirrorController to return our mock
     controller.getCodemirrorController = () => mockCodemirrorController
-    // Stub out controllers that don't exist in our minimal DOM
-    controller.getPreviewController = () => null
-    controller.getTypewriterController = () => null
-    controller.getPathDisplayController = () => null
-    controller.getStatsPanelController = () => null
-    controller.getHelpController = () => null
 
     // Reset mock state
     mockCodemirrorValue = ""
@@ -147,9 +66,7 @@ describe("AppController — Content Loss Detection", () => {
     if (controller) {
       if (controller.saveTimeout) clearTimeout(controller.saveTimeout)
       if (controller.saveMaxIntervalTimeout) clearTimeout(controller.saveMaxIntervalTimeout)
-      if (controller.configSaveTimeout) clearTimeout(controller.configSaveTimeout)
-      if (controller._controllerCacheTimeout) clearTimeout(controller._controllerCacheTimeout)
-      if (controller._tableCheckTimeout) clearTimeout(controller._tableCheckTimeout)
+      if (controller._offlineBackupTimeout) clearTimeout(controller._offlineBackupTimeout)
     }
     vi.restoreAllMocks()
     application.stop()
@@ -172,7 +89,7 @@ describe("AppController — Content Loss Detection", () => {
       // Should have called fetch (proceeded with save)
       expect(global.fetch).toHaveBeenCalled()
       // Banner should remain hidden
-      const banner = container.querySelector('[data-app-target="contentLossBanner"]')
+      const banner = container.querySelector('[data-autosave-target="contentLossBanner"]')
       expect(banner.classList.contains("hidden")).toBe(true)
     })
 
@@ -186,7 +103,7 @@ describe("AppController — Content Loss Detection", () => {
       // Should NOT have called fetch (save blocked)
       expect(global.fetch).not.toHaveBeenCalled()
       // Banner should be visible
-      const banner = container.querySelector('[data-app-target="contentLossBanner"]')
+      const banner = container.querySelector('[data-autosave-target="contentLossBanner"]')
       expect(banner.classList.contains("hidden")).toBe(false)
       expect(banner.classList.contains("flex")).toBe(true)
       expect(controller._contentLossWarningActive).toBe(true)
@@ -252,7 +169,7 @@ describe("AppController — Content Loss Detection", () => {
       controller.showContentLossWarning()
       expect(controller._contentLossWarningActive).toBe(true)
 
-      const banner = container.querySelector('[data-app-target="contentLossBanner"]')
+      const banner = container.querySelector('[data-autosave-target="contentLossBanner"]')
       expect(banner.classList.contains("hidden")).toBe(false)
 
       // Dismiss it
@@ -279,7 +196,7 @@ describe("AppController — Content Loss Detection", () => {
       controller.saveAnywayAfterWarning()
 
       // Banner should be dismissed
-      const banner = container.querySelector('[data-app-target="contentLossBanner"]')
+      const banner = container.querySelector('[data-autosave-target="contentLossBanner"]')
       expect(banner.classList.contains("hidden")).toBe(true)
       // Override should be set so saveNow bypasses content loss check
       expect(controller._contentLossOverride).toBe(true)
@@ -287,7 +204,7 @@ describe("AppController — Content Loss Detection", () => {
     })
   })
 
-  describe("onEditorChange()", () => {
+  describe("checkContentRestored()", () => {
     it("auto-dismisses warning when content is restored (e.g. Ctrl+Z)", () => {
       const originalContent = makeContent(300)
       controller._lastSavedContent = originalContent
@@ -297,13 +214,11 @@ describe("AppController — Content Loss Detection", () => {
       controller.showContentLossWarning()
 
       // Simulate content being restored (e.g., user pressed Ctrl+Z)
-      mockCodemirrorValue = originalContent
-
-      controller.onEditorChange({ detail: { docChanged: true } })
+      controller.checkContentRestored(originalContent)
 
       // Warning should be auto-dismissed
       expect(controller._contentLossWarningActive).toBe(false)
-      const banner = container.querySelector('[data-app-target="contentLossBanner"]')
+      const banner = container.querySelector('[data-autosave-target="contentLossBanner"]')
       expect(banner.classList.contains("hidden")).toBe(true)
     })
 
@@ -315,13 +230,11 @@ describe("AppController — Content Loss Detection", () => {
       controller.showContentLossWarning()
 
       // Content is still empty
-      mockCodemirrorValue = ""
-
-      controller.onEditorChange({ detail: { docChanged: true } })
+      controller.checkContentRestored("")
 
       // Warning should remain
       expect(controller._contentLossWarningActive).toBe(true)
-      const banner = container.querySelector('[data-app-target="contentLossBanner"]')
+      const banner = container.querySelector('[data-autosave-target="contentLossBanner"]')
       expect(banner.classList.contains("hidden")).toBe(false)
     })
   })
@@ -420,12 +333,12 @@ describe("AppController — Content Loss Detection", () => {
       controller.getRecoveryDiffController = () => null
     })
 
-    it("onEditorChange while offline schedules backup (debounced)", async () => {
+    it("scheduleOfflineBackup while offline triggers backup (debounced)", async () => {
       controller.currentFile = "test.md"
       controller.isOffline = true
       mockCodemirrorValue = "offline content"
 
-      controller.onEditorChange({ detail: { docChanged: true } })
+      controller.scheduleOfflineBackup()
 
       // Backup should NOT be called immediately (debounced)
       expect(mockBackupController.save).not.toHaveBeenCalled()
@@ -436,12 +349,12 @@ describe("AppController — Content Loss Detection", () => {
       expect(mockBackupController.save).toHaveBeenCalledWith("test.md", "offline content")
     })
 
-    it("onEditorChange while online does NOT backup", () => {
+    it("scheduleOfflineBackup while online does NOT backup", () => {
       controller.currentFile = "test.md"
       controller.isOffline = false
       mockCodemirrorValue = "online content"
 
-      controller.onEditorChange({ detail: { docChanged: true } })
+      controller.scheduleOfflineBackup()
 
       // Should not schedule backup when online
       expect(controller._offlineBackupTimeout).toBeNull()
@@ -479,7 +392,7 @@ describe("AppController — Content Loss Detection", () => {
       expect(mockBackupController.clear).toHaveBeenCalledWith("test.md")
     })
 
-    it("showEditor with differing backup shows recovery dialog", () => {
+    it("checkOfflineBackup with differing backup shows recovery dialog", () => {
       const mockRecoveryController = {
         open: vi.fn()
       }
@@ -491,7 +404,7 @@ describe("AppController — Content Loss Detection", () => {
         timestamp: 1700000000000
       })
 
-      controller.showEditor("server content", "markdown")
+      controller.checkOfflineBackup("server content")
 
       expect(mockBackupController.check).toHaveBeenCalledWith("test.md", "server content")
       expect(mockRecoveryController.open).toHaveBeenCalledWith({
@@ -502,7 +415,7 @@ describe("AppController — Content Loss Detection", () => {
       })
     })
 
-    it("showEditor with matching backup does NOT show dialog", () => {
+    it("checkOfflineBackup with matching backup does NOT show dialog", () => {
       const mockRecoveryController = {
         open: vi.fn()
       }
@@ -512,7 +425,7 @@ describe("AppController — Content Loss Detection", () => {
       // check returns null when content matches (auto-cleared)
       mockBackupController.check.mockReturnValue(null)
 
-      controller.showEditor("server content", "markdown")
+      controller.checkOfflineBackup("server content")
 
       expect(mockRecoveryController.open).not.toHaveBeenCalled()
     })
@@ -559,11 +472,6 @@ describe("AppController — Content Loss Detection", () => {
       // In-flight save completes during offline
       resolveFetch({ ok: true })
       await savePromise
-
-      // The post-save freshness check should detect content changed,
-      // but we're offline so it shouldn't schedule (scheduleAutoSave guards this)
-      // However, hasUnsavedChanges should still be true because of the offline guard
-      // in the freshness re-check (isOffline is true, so scheduleAutoSave won't schedule)
 
       // Connection restored
       global.fetch = vi.fn().mockResolvedValue({ ok: true })

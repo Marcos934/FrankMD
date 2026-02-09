@@ -25,6 +25,14 @@ export default class extends Controller {
     this.setupCloseOnClickOutside()
   }
 
+  _getCodemirrorController() {
+    const element = document.querySelector('[data-controller~="codemirror"]')
+    if (element) {
+      return this.application.getControllerForElementAndIdentifier(element, "codemirror")
+    }
+    return null
+  }
+
   disconnect() {
     if (this.boundClickOutside) {
       document.removeEventListener("mousedown", this.boundClickOutside)
@@ -198,20 +206,27 @@ export default class extends Controller {
     }
   }
 
-  // Apply the selected format and dispatch event
+  // Apply the selected format: use CodeMirror if available, else dispatch event
   applyFormat(format) {
     if (!format || !this.selectionData) return
 
-    this.dispatch("applied", {
-      detail: {
-        format: format.id,
-        prefix: format.prefix,
-        suffix: format.suffix,
-        selectionData: this.selectionData
-      }
-    })
-
-    this.close()
+    const cm = this._getCodemirrorController()
+    if (cm) {
+      this.applyFormatToEditor(format, this.selectionData, cm)
+      this.close()
+      this.dispatch("content-changed")
+    } else {
+      // Fallback: dispatch applied event for legacy handling
+      this.dispatch("applied", {
+        detail: {
+          format: format.id,
+          prefix: format.prefix,
+          suffix: format.suffix,
+          selectionData: this.selectionData
+        }
+      })
+      this.close()
+    }
   }
 
   // Get a format by its ID
@@ -388,6 +403,91 @@ export default class extends Controller {
     textarea.focus()
     // Dispatch input event to trigger syntax highlighting update
     textarea.dispatchEvent(new Event("input", { bubbles: true }))
+  }
+
+  // Apply format directly to CodeMirror editor (wrap/unwrap/toggle + link cursor positioning)
+  applyFormatToEditor(format, selectionData, codemirrorController) {
+    if (!format || !selectionData || !codemirrorController) return
+
+    const { prefix, suffix } = format
+    const { start, end, text } = selectionData
+    const fullText = codemirrorController.getValue()
+
+    // Check for toggle (unwrap) if format is symmetric
+    const isToggleable = prefix === suffix
+    if (isToggleable) {
+      // Case 1: Selection itself includes the markers
+      if (text.startsWith(prefix) && text.endsWith(suffix) && text.length >= prefix.length + suffix.length) {
+        const unwrapped = text.slice(prefix.length, -suffix.length || undefined)
+        codemirrorController.replaceRange(unwrapped, start, end)
+        codemirrorController.setSelection(start, start + unwrapped.length)
+        codemirrorController.focus()
+        return
+      }
+
+      // Case 2: Markers are just outside the selection
+      const beforeStart = start - prefix.length
+      const afterEnd = end + suffix.length
+      if (beforeStart >= 0 && afterEnd <= fullText.length) {
+        const textBefore = fullText.substring(beforeStart, start)
+        const textAfter = fullText.substring(end, afterEnd)
+        if (textBefore === prefix && textAfter === suffix) {
+          codemirrorController.replaceRange(text, beforeStart, afterEnd)
+          codemirrorController.setSelection(beforeStart, beforeStart + text.length)
+          codemirrorController.focus()
+          return
+        }
+      }
+    }
+
+    // Build the formatted text
+    const formattedText = prefix + text + suffix
+
+    // Replace the selected text
+    codemirrorController.replaceRange(formattedText, start, end)
+
+    // Calculate new cursor position
+    // For link format, select "url" for easy replacement
+    if (prefix === "[" && suffix === "](url)") {
+      const urlStart = start + prefix.length + text.length + 2 // After ](
+      const urlEnd = urlStart + 3 // Select "url"
+      codemirrorController.setSelection(urlStart, urlEnd)
+    } else {
+      // Position cursor after the formatted text
+      const newPosition = start + formattedText.length
+      codemirrorController.setSelection(newPosition, newPosition)
+    }
+
+    codemirrorController.focus()
+  }
+
+  // Handle context menu with CodeMirror selection check
+  onContextMenu(event, codemirrorController, isMarkdown) {
+    if (!isMarkdown || !codemirrorController) return
+
+    const { from, to, text: selectedText } = codemirrorController.getSelection()
+
+    // Only show custom menu if text is selected
+    if (from === to) return
+    if (!selectedText.trim()) return
+
+    event.preventDefault()
+
+    // Create a textarea adapter for menu positioning
+    const textarea = document.querySelector('[data-app-target="textarea"]')
+    if (textarea) {
+      this.openAtPosition(textarea, event.clientX, event.clientY)
+    }
+  }
+
+  // Open format menu from keyboard shortcut (Ctrl+M) using CodeMirror
+  openFromKeyboard(codemirrorController) {
+    if (!codemirrorController) return
+
+    const textarea = document.querySelector('[data-app-target="textarea"]')
+    if (textarea) {
+      this.openAtCursor(textarea)
+    }
   }
 
   // Get approximate caret coordinates in a textarea

@@ -12,7 +12,7 @@ import {
   createKeyHandler,
   mergeShortcuts
 } from "lib/keyboard_shortcuts"
-import { createTextareaAdapter, getEditorContent } from "lib/codemirror_adapter"
+import { createTextareaAdapter } from "lib/codemirror_adapter"
 import {
   insertBlockContent,
   insertInlineContent,
@@ -20,8 +20,6 @@ import {
   insertCodeBlock,
   insertVideoEmbed
 } from "lib/codemirror_content_insertion"
-import { undo } from "@codemirror/commands"
-
 export default class extends Controller {
   static targets = [
     "fileTree",
@@ -29,7 +27,6 @@ export default class extends Controller {
     "editor",
     "textarea",
     "currentPath",
-    "saveStatus",
     "contextMenu",
     "editorToolbar",
     "helpDialog",
@@ -38,8 +35,7 @@ export default class extends Controller {
     "sidebarToggle",
     "aiButton",
     "editorWrapper",
-    "editorBody",
-    "contentLossBanner"
+    "editorBody"
   ]
 
   static values = {
@@ -53,16 +49,6 @@ export default class extends Controller {
     this.currentFile = null
     this.currentFileType = null  // "markdown", "config", or null
     this.expandedFolders = new Set()
-    this.saveTimeout = null
-    this.saveMaxIntervalTimeout = null  // Safety net for continuous typing
-    this.isOffline = false
-    this.hasUnsavedChanges = false
-    this._isSaving = false  // Prevents concurrent saveNow() calls
-    this._lastSavedContent = null  // Track content to avoid redundant saves
-    this._lastSaveTime = 0  // Track when we last saved
-    this._contentLossWarningActive = false  // Content loss warning banner visible
-    this._contentLossOverride = false  // User clicked "Save Anyway"
-    this._offlineBackupTimeout = null  // Debounce timer for offline localStorage backup
 
     // Editor customization - fonts in alphabetical order, Cascadia Code as default
     this.editorFonts = [
@@ -107,10 +93,6 @@ export default class extends Controller {
     // Track pending config saves to debounce
     this.configSaveTimeout = null
 
-    // Scroll sync coordination - prevents feedback loops between editor and preview
-    this._scrollSource = null // 'editor' or 'preview'
-    this._scrollSourceTimeout = null
-
     // Controller caching - avoid repeated querySelector calls
     this._controllerCache = {}
     this._controllerCacheTimeout = null
@@ -121,7 +103,6 @@ export default class extends Controller {
     this.renderTree()
     this.setupKeyboardShortcuts()
     this.setupDialogClickOutside()
-    this.setupSyncScroll()
     this.applyEditorSettings()
     this.applyPreviewZoom()
     this.applySidebarVisibility()
@@ -154,12 +135,9 @@ export default class extends Controller {
 
   disconnect() {
     // Clear all timeouts
-    if (this.saveTimeout) clearTimeout(this.saveTimeout)
-    if (this.saveMaxIntervalTimeout) clearTimeout(this.saveMaxIntervalTimeout)
     if (this.configSaveTimeout) clearTimeout(this.configSaveTimeout)
     if (this._controllerCacheTimeout) clearTimeout(this._controllerCacheTimeout)
     if (this._tableCheckTimeout) clearTimeout(this._tableCheckTimeout)
-    if (this._offlineBackupTimeout) clearTimeout(this._offlineBackupTimeout)
 
     // Remove window/document event listeners
     if (this.boundPopstateHandler) {
@@ -267,6 +245,14 @@ export default class extends Controller {
 
   getRecoveryDiffController() {
     return this._getCachedController("recovery-diff", '[data-controller~="recovery-diff"]')
+  }
+
+  getAutosaveController() {
+    return this._getCachedController("autosave", '[data-controller~="autosave"]')
+  }
+
+  getScrollSyncController() {
+    return this._getCachedController("scroll-sync", '[data-controller~="scroll-sync"]')
   }
 
   // === URL Management for Bookmarkable URLs ===
@@ -530,7 +516,8 @@ export default class extends Controller {
       }
     } catch (error) {
       console.error("Error loading file:", error)
-      this.showSaveStatus(window.t("status.error_loading"), true)
+      const autosave = this.getAutosaveController()
+      if (autosave) autosave.showSaveStatus(window.t("status.error_loading"), true)
     }
   }
 
@@ -539,12 +526,12 @@ export default class extends Controller {
     this.editorPlaceholderTarget.classList.add("hidden")
     this.editorTarget.classList.remove("hidden")
 
-    // Track the loaded content as "saved" baseline (prevents unnecessary saves)
-    this._lastSavedContent = content
-    this.hasUnsavedChanges = false
-
-    // Check for offline backup that may differ from server version
-    this._checkOfflineBackup(content)
+    // Delegate persistence tracking to autosave controller
+    const autosave = this.getAutosaveController()
+    if (autosave) {
+      autosave.setFile(this.currentFile, content)
+      autosave.checkOfflineBackup(content)
+    }
 
     // Set content via CodeMirror controller
     const codemirrorController = this.getCodemirrorController()
@@ -600,31 +587,26 @@ export default class extends Controller {
 
   // Handle CodeMirror editor change events
   onEditorChange(event) {
-    // Auto-dismiss content loss warning if content is restored (e.g., user pressed Ctrl+Z)
-    if (this._contentLossWarningActive && this._lastSavedContent) {
+    const autosave = this.getAutosaveController()
+    if (autosave) {
       const codemirrorController = this.getCodemirrorController()
       const currentContent = codemirrorController ? codemirrorController.getValue() : ""
-      const lostChars = this._lastSavedContent.length - currentContent.length
-      const lostPercent = this._lastSavedContent.length > 0 ? lostChars / this._lastSavedContent.length : 0
-
-      if (lostPercent <= 0.2 || lostChars <= 50) {
-        this.dismissContentLossWarning()
-      }
+      autosave.checkContentRestored(currentContent)
+      autosave.scheduleOfflineBackup()
+      autosave.scheduleAutoSave()
     }
 
-    if (this.isOffline && this.currentFile) {
-      this._scheduleOfflineBackup()
-    }
-
-    this.scheduleAutoSave()
     this.scheduleStatsUpdate()
 
     // Only do markdown-specific processing for markdown files
     if (this.isMarkdownFile()) {
-      // Only sync preview if it's visible - skip entirely when closed
-      const previewController = this.getPreviewController()
-      if (previewController && previewController.isVisible) {
-        this.updatePreviewWithSync()
+      // Delegate preview sync to scroll-sync controller
+      const scrollSync = this.getScrollSyncController()
+      if (scrollSync) {
+        const previewController = this.getPreviewController()
+        if (previewController && previewController.isVisible) {
+          scrollSync.updatePreviewWithSync()
+        }
       }
 
       this.checkTableAtCursor()
@@ -641,84 +623,10 @@ export default class extends Controller {
     this.updateLinePosition()
   }
 
-  // Handle CodeMirror scroll events
-  onEditorScroll(event) {
-    // Only sync when preview is visible - skip all sync logic when closed
-    const previewController = this.getPreviewController()
-    if (!previewController || !previewController.isVisible) return
-
-    // Don't sync if this scroll was caused by preview sync (prevents feedback loop)
-    if (this._scrollSource === "preview") return
-
-    // Mark that editor initiated this scroll
-    this._markScrollFromEditor()
-
-    // Sync preview scroll position
-    const scrollRatio = event.detail?.scrollRatio || 0
-    previewController.syncScrollRatio(scrollRatio)
-  }
-
   // Dispatch an input event to trigger all listeners after programmatic value changes
   // Note: CodeMirror handles this automatically, but kept for backward compatibility
   triggerTextareaInput() {
     this.onEditorChange({ detail: { docChanged: true } })
-  }
-
-  onTextareaSelectionChange() {
-    // Legacy method - CodeMirror now handles selection via onEditorSelectionChange
-    this.updateLinePosition()
-  }
-
-  onTextareaScroll() {
-    // Legacy method - CodeMirror now handles scroll via onEditorScroll
-  }
-
-  // Mark that scroll was initiated by editor (prevents reverse sync)
-  _markScrollFromEditor() {
-    this._scrollSource = "editor"
-    if (this._scrollSourceTimeout) {
-      clearTimeout(this._scrollSourceTimeout)
-    }
-    // Clear flag after scroll animations complete (smooth scroll can take 300ms+)
-    // Use 400ms to cover debounced render (150ms) + smooth scroll (300ms)
-    this._scrollSourceTimeout = setTimeout(() => {
-      this._scrollSource = null
-    }, 400)
-  }
-
-  // Mark that scroll was initiated by preview (prevents reverse sync)
-  _markScrollFromPreview() {
-    this._scrollSource = "preview"
-    if (this._scrollSourceTimeout) {
-      clearTimeout(this._scrollSourceTimeout)
-    }
-    this._scrollSourceTimeout = setTimeout(() => {
-      this._scrollSource = null
-    }, 400)
-  }
-
-  // Update preview content only - does NOT sync scroll
-  // Scroll sync only happens via onEditorScroll when user explicitly scrolls
-  // This prevents editor from being disrupted during typing
-  updatePreviewWithSync() {
-    const previewController = this.getPreviewController()
-    if (!previewController || !previewController.isVisible) return
-
-    const codemirrorController = this.getCodemirrorController()
-    const content = getEditorContent(codemirrorController, this.hasTextareaTarget ? this.textareaTarget : null)
-
-    // Only render content - no scroll syncing during content changes
-    // The only exception is typewriter mode which needs cursor centering
-    if (this.typewriterModeEnabled) {
-      const cursorInfo = codemirrorController ? codemirrorController.getCursorPosition() : { offset: 0 }
-      previewController.updateWithSync(content, {
-        cursorPos: cursorInfo.offset,
-        typewriterMode: true
-      })
-    } else {
-      // Just render content without any scroll sync
-      previewController.render(content)
-    }
   }
 
   // Check if cursor is in a markdown table (debounced to avoid performance issues)
@@ -750,265 +658,18 @@ export default class extends Controller {
     }
   }
 
-  // === Offline Backup ===
+  // === Autosave Event Handlers ===
 
-  _scheduleOfflineBackup() {
-    if (this._offlineBackupTimeout) clearTimeout(this._offlineBackupTimeout)
-    this._offlineBackupTimeout = setTimeout(() => {
-      this._offlineBackupTimeout = null
-      const cm = this.getCodemirrorController()
-      const content = cm ? cm.getValue() : this.textareaTarget.value
-      const backup = this.getOfflineBackupController()
-      if (backup) backup.save(this.currentFile, content)
-    }, 1000)
+  onAutosaveConfigSaved() {
+    this.reloadConfig()
   }
 
-  _checkOfflineBackup(serverContent) {
-    const backup = this.getOfflineBackupController()
-    if (!backup) return
-    const data = backup.check(this.currentFile, serverContent)
-    if (!data) return
-    const recovery = this.getRecoveryDiffController()
-    if (recovery) {
-      recovery.open({
-        path: this.currentFile,
-        serverContent,
-        backupContent: data.content,
-        backupTimestamp: data.timestamp
-      })
-    }
-  }
-
-  onRecoveryResolved(event) {
-    const { source, content } = event.detail
-    const backup = this.getOfflineBackupController()
-    if (backup) backup.clear(this.currentFile)
-
-    if (source === "backup" && content) {
-      const cm = this.getCodemirrorController()
-      if (cm) cm.setValue(content)
-      this._lastSavedContent = null  // Force save — server doesn't have this content
-      this.hasUnsavedChanges = true
-      this.scheduleAutoSave()
-    }
-  }
-
-  // Auto-save configuration
-  static SAVE_DEBOUNCE_MS = 2000      // Wait 2 seconds after last keystroke
-  static SAVE_MAX_INTERVAL_MS = 30000 // Force save every 30 seconds if continuously typing
-
-  scheduleAutoSave() {
-    // Don't schedule saves while offline
-    if (this.isOffline) {
-      this.hasUnsavedChanges = true
-      return
-    }
-
-    // Don't schedule saves while content loss warning is active
-    if (this._contentLossWarningActive) {
-      this.hasUnsavedChanges = true
-      return
-    }
-
-    // Only show "unsaved" status once when transitioning from saved to unsaved
-    if (!this.hasUnsavedChanges) {
-      this.hasUnsavedChanges = true
-      this.showSaveStatus(window.t("status.unsaved"))
-    }
-
-    // Clear existing debounce timer
-    if (this.saveTimeout) {
-      clearTimeout(this.saveTimeout)
-    }
-
-    // Debounced save - triggers 2 seconds after user stops typing
-    this.saveTimeout = setTimeout(() => this.saveNow(), this.constructor.SAVE_DEBOUNCE_MS)
-
-    // Safety net: ensure we save at least every 30 seconds during continuous typing
-    // This prevents data loss if user types without pausing
-    if (!this.saveMaxIntervalTimeout) {
-      this.saveMaxIntervalTimeout = setTimeout(() => {
-        this.saveMaxIntervalTimeout = null
-        if (this.hasUnsavedChanges) {
-          this.saveNow()
-        }
-      }, this.constructor.SAVE_MAX_INTERVAL_MS)
-    }
-  }
-
-  async saveNow() {
-    // Don't attempt saves while offline
-    if (this.isOffline) {
-      this.hasUnsavedChanges = true
-      return
-    }
-
-    if (!this.currentFile) return
-
-    // Prevent concurrent saves — if a fetch is already in flight, skip.
-    // The post-save freshness check will reschedule if content changed.
-    if (this._isSaving) return
-
-    // Clear both timers
-    if (this.saveTimeout) {
-      clearTimeout(this.saveTimeout)
-      this.saveTimeout = null
-    }
-    if (this.saveMaxIntervalTimeout) {
-      clearTimeout(this.saveMaxIntervalTimeout)
-      this.saveMaxIntervalTimeout = null
-    }
-
-    // Get content from CodeMirror or fallback to textarea
-    const codemirrorController = this.getCodemirrorController()
-    const content = codemirrorController ? codemirrorController.getValue() : this.textareaTarget.value
-    const isConfigFile = this.currentFile === ".fed"
-
-    // Skip save if content hasn't actually changed since last save
-    if (content === this._lastSavedContent) {
-      this.hasUnsavedChanges = false
-      this.showSaveStatus("")
-      return
-    }
-
-    // Content loss detection: warn if large portion of content was deleted
-    if (this._lastSavedContent && !this._contentLossOverride) {
-      const lostChars = this._lastSavedContent.length - content.length
-      const lostPercent = lostChars / this._lastSavedContent.length
-
-      if (lostPercent > 0.2 && lostChars > 50) {
-        this.showContentLossWarning()
-        return
-      }
-    }
-
-    this._isSaving = true
-    try {
-      const response = await fetch(`/notes/${encodePath(this.currentFile)}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": this.csrfToken
-        },
-        body: JSON.stringify({ content })
-      })
-
-      if (!response.ok) {
-        throw new Error(window.t("errors.failed_to_save"))
-      }
-
-      // Track what we saved
-      this._lastSavedContent = content
-      this._lastSaveTime = Date.now()
-      this._contentLossOverride = false
-      this.hasUnsavedChanges = false
-      const backupController = this.getOfflineBackupController()
-      if (backupController) backupController.clear(this.currentFile)
-      this.showSaveStatus(window.t("status.saved"))
-      setTimeout(() => this.showSaveStatus(""), 2000)
-
-      // If config file was saved, reload the configuration
-      if (isConfigFile) {
-        await this.reloadConfig()
-      }
-
-      // Post-save freshness check: content may have changed during the fetch
-      // (user typed, or connection was lost and restored). Always flag unsaved
-      // so onConnectionRestored() or next scheduleAutoSave() picks it up.
-      const freshContent = codemirrorController ? codemirrorController.getValue() : this.textareaTarget.value
-      if (freshContent !== content) {
-        this.hasUnsavedChanges = true
-        if (!this.isOffline) {
-          this.scheduleAutoSave()
-        }
-      }
-    } catch (error) {
-      console.error("Error saving:", error)
-      this.showSaveStatus(window.t("status.error_saving"), true)
-    } finally {
-      this._isSaving = false
-    }
-  }
-
-  // Connection status handlers
-  onConnectionLost() {
-    this.isOffline = true
-
-    // Cancel any pending saves - we'll save when connection returns
-    if (this.saveTimeout) {
-      clearTimeout(this.saveTimeout)
-      this.saveTimeout = null
-      this.hasUnsavedChanges = true
-    }
-    if (this.saveMaxIntervalTimeout) {
-      clearTimeout(this.saveMaxIntervalTimeout)
-      this.saveMaxIntervalTimeout = null
-    }
-
-    // Cancel any pending config save
-    if (this.configSaveTimeout) {
+  onAutosaveOfflineChanged(event) {
+    const { offline } = event.detail
+    if (offline && this.configSaveTimeout) {
       clearTimeout(this.configSaveTimeout)
       this.configSaveTimeout = null
     }
-
-    // Use short status since full message is shown in the orange banner
-    this.showSaveStatus(window.t("connection.disconnected"), true)
-
-    // Immediately backup current content to localStorage
-    if (this.currentFile) {
-      const cm = this.getCodemirrorController()
-      const content = cm ? cm.getValue() : ""
-      const backup = this.getOfflineBackupController()
-      if (backup && content && content !== this._lastSavedContent) {
-        backup.save(this.currentFile, content)
-      }
-    }
-  }
-
-  onConnectionRestored() {
-    this.isOffline = false
-    this.showSaveStatus("")
-
-    // Save if there were unsaved changes
-    if (this.hasUnsavedChanges && this.currentFile) {
-      this.saveNow()
-    }
-  }
-
-  // === Content Loss Warning ===
-
-  showContentLossWarning() {
-    this._contentLossWarningActive = true
-    if (this.hasContentLossBannerTarget) {
-      this.contentLossBannerTarget.classList.remove("hidden")
-      this.contentLossBannerTarget.classList.add("flex")
-    }
-  }
-
-  dismissContentLossWarning() {
-    this._contentLossWarningActive = false
-    this._contentLossOverride = false
-    if (this.hasContentLossBannerTarget) {
-      this.contentLossBannerTarget.classList.add("hidden")
-      this.contentLossBannerTarget.classList.remove("flex")
-    }
-  }
-
-  undoContentLoss() {
-    const codemirrorController = this.getCodemirrorController()
-    if (codemirrorController) {
-      const view = codemirrorController.getEditorView()
-      if (view) {
-        undo(view)
-      }
-    }
-    this.dismissContentLossWarning()
-  }
-
-  saveAnywayAfterWarning() {
-    this.dismissContentLossWarning()
-    this._contentLossOverride = true
-    this.saveNow()
   }
 
   // Reload configuration from server and apply changes
@@ -1069,18 +730,14 @@ export default class extends Controller {
         }))
       }
 
-      this.showSaveStatus(window.t("status.config_applied"))
-      setTimeout(() => this.showSaveStatus(""), 2000)
+      const autosaveCtrl = this.getAutosaveController()
+      if (autosaveCtrl) {
+        autosaveCtrl.showSaveStatus(window.t("status.config_applied"))
+        setTimeout(() => autosaveCtrl.showSaveStatus(""), 2000)
+      }
     } catch (error) {
       console.warn("Error reloading config:", error)
     }
-  }
-
-  showSaveStatus(text, isError = false) {
-    this.saveStatusTarget.textContent = text
-    this.saveStatusTarget.classList.toggle("hidden", !text)
-    this.saveStatusTarget.classList.toggle("text-red-500", isError)
-    this.saveStatusTarget.classList.toggle("dark:text-red-400", isError)
   }
 
   // === Preview Panel - Delegates to preview_controller ===
@@ -1098,27 +755,8 @@ export default class extends Controller {
   }
 
   updatePreview() {
-    const previewController = this.getPreviewController()
-    if (!previewController || !previewController.isVisible) return
-
-    const codemirrorController = this.getCodemirrorController()
-    const content = getEditorContent(codemirrorController, this.hasTextareaTarget ? this.textareaTarget : null)
-
-    // Just render content - no scroll syncing
-    // Scroll sync only happens via explicit scroll events
-    previewController.render(content)
-  }
-
-  setupSyncScroll() {
-    // CodeMirror handles scroll events via data-action bindings
-    // The onEditorScroll method handles preview synchronization
-  }
-
-  syncPreviewScrollToCursor() {
-    const previewController = this.getPreviewController()
-    if (previewController) {
-      previewController.syncToCursor()
-    }
+    const scrollSync = this.getScrollSyncController()
+    if (scrollSync) scrollSync.updatePreview()
   }
 
   // === Table Editor ===
@@ -1289,20 +927,6 @@ export default class extends Controller {
     }
   }
 
-  scheduleLineNumberUpdate() {
-    // CodeMirror handles line number updates automatically
-  }
-
-  syncLineNumberScroll() {
-    // CodeMirror handles line number scroll automatically
-  }
-
-  // === Syntax Highlighting - Now handled by CodeMirror ===
-
-  scheduleSyntaxHighlightUpdate() {
-    // CodeMirror handles syntax highlighting automatically
-  }
-
   toggleLineNumberMode() {
     const codemirrorController = this.getCodemirrorController()
     if (codemirrorController) {
@@ -1427,7 +1051,6 @@ export default class extends Controller {
     if (this.hasSidebarToggleTarget) {
       this.sidebarToggleTarget.setAttribute("aria-expanded", this.sidebarVisible.toString())
     }
-    this.scheduleLineNumberUpdate()
   }
 
   // === Typewriter Mode - Delegates to typewriter_controller ===
@@ -1801,8 +1424,9 @@ export default class extends Controller {
     }
 
     // Save file first if there are pending changes (server reads from disk)
-    if (this.saveTimeout) {
-      await this.saveNow()
+    const autosaveForAi = this.getAutosaveController()
+    if (autosaveForAi && autosaveForAi.saveTimeout) {
+      await autosaveForAi.saveNow()
     }
 
     // Find the ai-grammar controller and call open
@@ -1877,67 +1501,6 @@ export default class extends Controller {
       if (previewController && this.hasTextareaTarget) {
         previewController.setupEditorSync(this.textareaTarget)
       }
-      // Only render content - don't auto-scroll
-      // Let the user's current scroll position determine where to sync
-      this.updatePreview()
-      // Sync preview to editor's current scroll position (not cursor)
-      const codemirrorController = this.getCodemirrorController()
-      if (codemirrorController && previewController) {
-        const scrollRatio = codemirrorController.getScrollRatio()
-        previewController.syncScrollRatio(scrollRatio)
-      }
-    }
-    this.scheduleLineNumberUpdate()
-  }
-
-  // Handle preview scroll event - sync editor to preview position
-  // IMPORTANT: This is only called when user explicitly scrolls the preview
-  // The preview_controller filters out scroll events during content updates
-  onPreviewScroll(event) {
-    const codemirrorController = this.getCodemirrorController()
-    if (!codemirrorController) return
-
-    // Don't sync if this scroll was caused by editor sync (prevents feedback loop)
-    if (this._scrollSource === "editor") return
-
-    // Mark that preview initiated this scroll
-    this._markScrollFromPreview()
-
-    const { scrollRatio, sourceLine, totalLines } = event.detail
-    const scrollInfo = codemirrorController.getScrollInfo()
-    const maxScroll = scrollInfo.height - scrollInfo.clientHeight
-    if (maxScroll <= 0) return
-
-    // Handle edge cases explicitly - ensure we reach exact top and bottom
-    if (scrollRatio <= 0.01) {
-      if (scrollInfo.top !== 0) {
-        codemirrorController.scrollTo(0)
-      }
-      return
-    }
-
-    if (scrollRatio >= 0.99) {
-      if (Math.abs(scrollInfo.top - maxScroll) > 1) {
-        codemirrorController.scrollTo(maxScroll)
-      }
-      return
-    }
-
-    let targetScroll
-
-    // Try line-based sync first (more accurate with images/embeds)
-    if (sourceLine && totalLines > 1) {
-      // Convert source line to scroll position
-      const lineRatio = (sourceLine - 1) / (totalLines - 1)
-      targetScroll = lineRatio * maxScroll
-    } else {
-      // Fallback to ratio-based sync
-      targetScroll = scrollRatio * maxScroll
-    }
-
-    // Only scroll if change is significant (prevent jitter)
-    if (Math.abs(scrollInfo.top - targetScroll) > 5) {
-      codemirrorController.scrollTo(targetScroll)
     }
   }
 
@@ -2057,7 +1620,7 @@ export default class extends Controller {
   executeShortcutAction(action) {
     const actions = {
       newNote: () => this.getFileOperationsController()?.newNote(),
-      save: () => this.saveNow(),
+      save: () => this.getAutosaveController()?.saveNow(),
       // Note: bold and italic are handled by CodeMirror's keymap (codemirror_extensions.js)
       togglePreview: () => this.togglePreview(),
       findInFile: () => this.openFindReplace(),
@@ -2104,134 +1667,41 @@ export default class extends Controller {
     return this.editorIndent || "  "
   }
 
-  // Handle keydown events on textarea (legacy - now handled by CodeMirror)
-  onTextareaKeydown(event) {
-    // CodeMirror handles Tab/Shift+Tab indentation via indentWithTab keymap
-    // This method is kept for backward compatibility but doesn't need to do anything
-  }
-
   // === Text Format Menu ===
 
   // Open text format menu via Ctrl+M
   openTextFormatMenu() {
     if (!this.isMarkdownFile()) return
-
-    const codemirrorController = this.getCodemirrorController()
-    if (!codemirrorController) return
-
+    const cm = this.getCodemirrorController()
+    if (!cm) return
     const textFormatController = this.getTextFormatController()
-    if (textFormatController) {
-      // Use the textarea adapter for text format controller
-      textFormatController.openAtCursor(this.createTextareaAdapter())
-    }
+    if (textFormatController) textFormatController.openFromKeyboard(cm)
   }
 
-  // Handle right-click on editor to show text format menu
   onTextareaContextMenu(event) {
     if (!this.isMarkdownFile()) return
-
-    const codemirrorController = this.getCodemirrorController()
-    if (!codemirrorController) return
-
-    const { from, to, text: selectedText } = codemirrorController.getSelection()
-
-    // Only show custom menu if text is selected
-    if (from === to) return // Let default context menu show
-
-    if (!selectedText.trim()) return // Let default context menu show
-
-    // Prevent default context menu
-    event.preventDefault()
-
+    const cm = this.getCodemirrorController()
     const textFormatController = this.getTextFormatController()
-    if (textFormatController) {
-      textFormatController.openAtPosition(this.createTextareaAdapter(), event.clientX, event.clientY)
-    }
+    if (textFormatController) textFormatController.onContextMenu(event, cm, true)
   }
 
-  // Handle text format applied event
-  onTextFormatApplied(event) {
-    const codemirrorController = this.getCodemirrorController()
-    if (!codemirrorController) return
-
-    const { prefix, suffix, selectionData } = event.detail
-    if (!selectionData) return
-
-    const { start, end, text } = selectionData
-    const fullText = codemirrorController.getValue()
-
-    // Check for toggle (unwrap) if format is symmetric
-    const isToggleable = prefix === suffix
-    if (isToggleable) {
-      // Case 1: Selection itself includes the markers
-      if (text.startsWith(prefix) && text.endsWith(suffix) && text.length >= prefix.length + suffix.length) {
-        const unwrapped = text.slice(prefix.length, -suffix.length || undefined)
-        codemirrorController.replaceRange(unwrapped, start, end)
-        codemirrorController.setSelection(start, start + unwrapped.length)
-        codemirrorController.focus()
-        this.scheduleAutoSave()
-        this.updatePreview()
-        return
-      }
-
-      // Case 2: Markers are just outside the selection
-      const beforeStart = start - prefix.length
-      const afterEnd = end + suffix.length
-      if (beforeStart >= 0 && afterEnd <= fullText.length) {
-        const textBefore = fullText.substring(beforeStart, start)
-        const textAfter = fullText.substring(end, afterEnd)
-        if (textBefore === prefix && textAfter === suffix) {
-          codemirrorController.replaceRange(text, beforeStart, afterEnd)
-          codemirrorController.setSelection(beforeStart, beforeStart + text.length)
-          codemirrorController.focus()
-          this.scheduleAutoSave()
-          this.updatePreview()
-          return
-        }
-      }
-    }
-
-    // Build the formatted text
-    const formattedText = prefix + text + suffix
-
-    // Replace the selected text
-    codemirrorController.replaceRange(formattedText, start, end)
-
-    // Calculate new cursor position
-    // For link format, select "url" for easy replacement
-    if (prefix === "[" && suffix === "](url)") {
-      const urlStart = start + prefix.length + text.length + 2 // After ](
-      const urlEnd = urlStart + 3 // Select "url"
-      codemirrorController.setSelection(urlStart, urlEnd)
-    } else {
-      // Position cursor after the formatted text
-      const newPosition = start + formattedText.length
-      codemirrorController.setSelection(newPosition, newPosition)
-    }
-
-    codemirrorController.focus()
-    this.scheduleAutoSave()
+  onTextFormatContentChanged() {
+    this.getAutosaveController()?.scheduleAutoSave()
     this.updatePreview()
   }
 
-  // Handle text format menu closed event (return focus to textarea)
   onTextFormatClosed() {
-    if (this.hasTextareaTarget) {
-      this.textareaTarget.focus()
-    }
+    const cm = this.getCodemirrorController()
+    if (cm) cm.focus()
   }
 
-  // Apply inline formatting (used by text format menu via Ctrl+M or right-click)
-  // Note: Ctrl+B and Ctrl+I are handled by CodeMirror's keymap in codemirror_extensions.js
   applyInlineFormat(formatId) {
-    const codemirrorController = this.getCodemirrorController()
-    if (!codemirrorController) return
-
+    const cm = this.getCodemirrorController()
+    if (!cm) return
     const textFormatController = this.getTextFormatController()
     if (!textFormatController) return
-
     if (textFormatController.applyFormatById(formatId, this.createTextareaAdapter())) {
-      this.scheduleAutoSave()
+      this.getAutosaveController()?.scheduleAutoSave()
       this.updatePreview()
     }
   }
@@ -2259,7 +1729,7 @@ export default class extends Controller {
 
     insertInlineContent(codemirrorController, insertText)
     codemirrorController.focus()
-    this.scheduleAutoSave()
+    this.getAutosaveController()?.scheduleAutoSave()
     this.updatePreview()
   }
 
