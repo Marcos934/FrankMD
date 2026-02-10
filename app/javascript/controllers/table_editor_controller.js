@@ -7,7 +7,8 @@ export default class extends Controller {
   static targets = [
     "dialog",
     "grid",
-    "size",
+    "columnCountInput",
+    "rowCountInput",
     "cellMenu",
     "moveColLeftBtn",
     "moveColRightBtn",
@@ -57,6 +58,7 @@ export default class extends Controller {
 
     this.renderGrid()
     this.dialogTarget.showModal()
+    this.dialogTarget.focus({ preventScroll: true })
   }
 
   close() {
@@ -73,8 +75,7 @@ export default class extends Controller {
   renderGrid() {
     const rows = this.tableData.length
     const cols = this.tableData[0]?.length || 3
-
-    this.sizeTarget.textContent = `${cols} x ${rows}`
+    this.syncDimensionInputs(rows, cols)
 
     let html = '<table class="table-editor-grid w-full">'
 
@@ -126,32 +127,116 @@ export default class extends Controller {
     this.tableData[row][col] = value
   }
 
-  addColumn() {
-    const cols = this.tableData[0]?.length || 0
-    for (let i = 0; i < this.tableData.length; i++) {
-      this.tableData[i].push(i === 0 ? window.t("dialogs.table_editor.header_n", { n: cols + 1 }) : "")
+  parseCount(value, fallback) {
+    const parsed = parseInt(value, 10)
+    if (Number.isNaN(parsed)) return fallback
+    return Math.max(1, parsed)
+  }
+
+  syncDimensionInputs(rows = this.tableData.length, cols = this.tableData[0]?.length || 1) {
+    if (this.hasColumnCountInputTarget) {
+      this.columnCountInputTarget.value = cols
     }
+    if (this.hasRowCountInputTarget) {
+      this.rowCountInputTarget.value = rows
+    }
+  }
+
+  setColumnCount(event) {
+    const fallback = this.tableData[0]?.length || 1
+    const nextCount = this.parseCount(event.target.value, fallback)
+    this.setColumnCountTo(nextCount)
+  }
+
+  incrementColumnCount() {
+    const cols = this.tableData[0]?.length || 1
+    this.setColumnCountTo(cols + 1)
+  }
+
+  decrementColumnCount() {
+    const cols = this.tableData[0]?.length || 1
+    this.setColumnCountTo(cols - 1)
+  }
+
+  setColumnCountTo(count) {
+    if (this.tableData.length === 0) {
+      this.tableData = [[window.t("dialogs.table_editor.header_n", { n: 1 })]]
+    }
+
+    const currentCols = this.tableData[0]?.length || 1
+    const nextCols = Math.max(1, Math.floor(count))
+
+    if (nextCols === currentCols) {
+      this.syncDimensionInputs(this.tableData.length, currentCols)
+      return
+    }
+
+    for (let r = 0; r < this.tableData.length; r++) {
+      if (nextCols > this.tableData[r].length) {
+        for (let c = this.tableData[r].length; c < nextCols; c++) {
+          this.tableData[r].push(r === 0 ? window.t("dialogs.table_editor.header_n", { n: c + 1 }) : "")
+        }
+      } else {
+        this.tableData[r] = this.tableData[r].slice(0, nextCols)
+      }
+    }
+
     this.renderGrid()
+  }
+
+  setRowCount(event) {
+    const fallback = this.tableData.length || 1
+    const nextCount = this.parseCount(event.target.value, fallback)
+    this.setRowCountTo(nextCount)
+  }
+
+  incrementRowCount() {
+    this.setRowCountTo(this.tableData.length + 1)
+  }
+
+  decrementRowCount() {
+    this.setRowCountTo(this.tableData.length - 1)
+  }
+
+  setRowCountTo(count) {
+    if (this.tableData.length === 0) {
+      this.tableData = [[window.t("dialogs.table_editor.header_n", { n: 1 })]]
+    }
+
+    const currentRows = this.tableData.length
+    const nextRows = Math.max(1, Math.floor(count))
+    const cols = this.tableData[0]?.length || 1
+
+    if (nextRows === currentRows) {
+      this.syncDimensionInputs(currentRows, cols)
+      return
+    }
+
+    if (nextRows > currentRows) {
+      for (let r = currentRows; r < nextRows; r++) {
+        this.tableData.push(new Array(cols).fill(""))
+      }
+    } else {
+      this.tableData = this.tableData.slice(0, nextRows)
+    }
+
+    this.renderGrid()
+  }
+
+  addColumn() {
+    this.incrementColumnCount()
   }
 
   removeColumn() {
-    if (!this.tableData[0] || this.tableData[0].length <= 1) return
-    for (let i = 0; i < this.tableData.length; i++) {
-      this.tableData[i].pop()
-    }
-    this.renderGrid()
+    this.decrementColumnCount()
   }
 
   addRow() {
-    const cols = this.tableData[0]?.length || 3
-    this.tableData.push(new Array(cols).fill(""))
-    this.renderGrid()
+    this.incrementRowCount()
   }
 
   removeRow() {
-    if (this.tableData.length <= 1) return
-    this.tableData.pop()
-    this.renderGrid()
+    this.decrementRowCount()
   }
 
   insert() {

@@ -3,52 +3,74 @@
   <dialog
     class="p-0 rounded-lg shadow-xl backdrop:bg-black/50 bg-[var(--theme-bg-secondary)] border border-[var(--theme-border)] max-w-3xl"
     data-table-editor-target="dialog"
+    tabindex="-1"
   >
     <div class="p-4 text-[var(--theme-text-primary)]">
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="text-sm font-semibold"><%= t('dialogs.table_editor.title') %></h3>
-        <div class="flex items-center gap-1">
-          <button
-            type="button"
-            data-action="click->table-editor#addColumn"
-            class="p-1.5 rounded hover:bg-[var(--theme-bg-hover)] text-[var(--theme-text-muted)]"
-            title="<%= t('dialogs.table_editor.add_column') %>"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            data-action="click->table-editor#removeColumn"
-            class="p-1.5 rounded hover:bg-[var(--theme-bg-hover)] text-[var(--theme-text-muted)]"
-            title="<%= t('dialogs.table_editor.remove_column') %>"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
-            </svg>
-          </button>
-          <div class="h-4 w-px bg-[var(--theme-border)] mx-1"></div>
-          <button
-            type="button"
-            data-action="click->table-editor#addRow"
-            class="p-1.5 rounded hover:bg-[var(--theme-bg-hover)] text-[var(--theme-text-muted)]"
-            title="<%= t('dialogs.table_editor.add_row') %>"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            data-action="click->table-editor#removeRow"
-            class="p-1.5 rounded hover:bg-[var(--theme-bg-hover)] text-[var(--theme-text-muted)]"
-            title="<%= t('dialogs.table_editor.remove_row') %>"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
-            </svg>
-          </button>
+      <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <h3 class="text-base font-semibold"><%= t('dialogs.table_editor.title') %></h3>
+        <div class="table-editor-dimension-controls">
+          <div class="table-editor-dimension-control">
+            <span class="table-editor-dimension-label"><%= t('dialogs.table_editor.column') %></span>
+            <div class="table-editor-stepper">
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value="3"
+                inputmode="numeric"
+                data-table-editor-target="columnCountInput"
+                data-action="change->table-editor#setColumnCount"
+                aria-label="<%= t('dialogs.table_editor.column') %>"
+              >
+              <div class="table-editor-stepper-buttons">
+                <button
+                  type="button"
+                  class="table-editor-stepper-btn"
+                  data-action="click->table-editor#decrementColumnCount"
+                  title="<%= t('dialogs.table_editor.remove_column') %>"
+                  aria-label="<%= t('dialogs.table_editor.remove_column') %>"
+                >-</button>
+                <button
+                  type="button"
+                  class="table-editor-stepper-btn"
+                  data-action="click->table-editor#incrementColumnCount"
+                  title="<%= t('dialogs.table_editor.add_column') %>"
+                  aria-label="<%= t('dialogs.table_editor.add_column') %>"
+                >+</button>
+              </div>
+            </div>
+          </div>
+          <div class="table-editor-dimension-control">
+            <span class="table-editor-dimension-label"><%= t('dialogs.table_editor.row') %></span>
+            <div class="table-editor-stepper">
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value="3"
+                inputmode="numeric"
+                data-table-editor-target="rowCountInput"
+                data-action="change->table-editor#setRowCount"
+                aria-label="<%= t('dialogs.table_editor.row') %>"
+              >
+              <div class="table-editor-stepper-buttons">
+                <button
+                  type="button"
+                  class="table-editor-stepper-btn"
+                  data-action="click->table-editor#decrementRowCount"
+                  title="<%= t('dialogs.table_editor.remove_row') %>"
+                  aria-label="<%= t('dialogs.table_editor.remove_row') %>"
+                >-</button>
+                <button
+                  type="button"
+                  class="table-editor-stepper-btn"
+                  data-action="click->table-editor#incrementRowCount"
+                  title="<%= t('dialogs.table_editor.add_row') %>"
+                  aria-label="<%= t('dialogs.table_editor.add_row') %>"
+                >+</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -133,8 +155,7 @@
         <!-- Grid will be rendered by JavaScript -->
       </div>
 
-      <div class="flex items-center justify-between mt-4">
-        <span class="text-xs text-[var(--theme-text-muted)]" data-table-editor-target="size">3 x 3</span>
+      <div class="flex items-center justify-end mt-4">
         <div class="flex gap-2">
           <%= render "shared/button_secondary", label: t('common.cancel'), action: "click->table-editor#close" %>
           <%= render "shared/button_primary", label: t('dialogs.table_editor.insert_table'), action: "click->table-editor#insert" %>

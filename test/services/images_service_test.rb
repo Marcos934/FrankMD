@@ -259,6 +259,31 @@ class ImagesServiceTest < ActiveSupport::TestCase
     assert_includes %w[image/jpeg image/png], content_type
   end
 
+  # === imagemagick_resize_arg (whitelist) ===
+
+  test "imagemagick_resize_arg returns correct percentage for known ratios" do
+    assert_equal "25%", ImagesService.send(:imagemagick_resize_arg, 0.25)
+    assert_equal "50%", ImagesService.send(:imagemagick_resize_arg, 0.5)
+    assert_equal "75%", ImagesService.send(:imagemagick_resize_arg, 0.75)
+    assert_equal "100%", ImagesService.send(:imagemagick_resize_arg, 1)
+    assert_equal "100%", ImagesService.send(:imagemagick_resize_arg, "1.0")
+    assert_equal "33%", ImagesService.send(:imagemagick_resize_arg, "0.33")
+    assert_equal "67%", ImagesService.send(:imagemagick_resize_arg, "0.67")
+  end
+
+  test "imagemagick_resize_arg defaults to 50% for unknown values" do
+    assert_equal "50%", ImagesService.send(:imagemagick_resize_arg, 0.42)
+    assert_equal "50%", ImagesService.send(:imagemagick_resize_arg, "arbitrary")
+    assert_equal "50%", ImagesService.send(:imagemagick_resize_arg, nil)
+  end
+
+  test "imagemagick_resize_arg rejects shell injection attempts" do
+    # These should all fall through to the safe default
+    assert_equal "50%", ImagesService.send(:imagemagick_resize_arg, "50%; rm -rf /")
+    assert_equal "50%", ImagesService.send(:imagemagick_resize_arg, "100%\nmalicious")
+    assert_equal "50%", ImagesService.send(:imagemagick_resize_arg, "`whoami`")
+  end
+
   # === content_type_for ===
 
   test "content_type_for returns correct mime types" do
