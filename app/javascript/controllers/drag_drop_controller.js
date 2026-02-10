@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { post } from "@rails/request.js"
 import { encodePath } from "lib/url_utils"
 
 // Drag and Drop Controller
@@ -169,19 +170,14 @@ export default class extends Controller {
   // Move item to new location
   async moveItem(oldPath, newPath, type) {
     try {
-      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || ""
       const endpoint = type === "file" ? "notes" : "folders"
-      const response = await fetch(`/${endpoint}/${encodePath(oldPath)}/rename`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken
-        },
-        body: JSON.stringify({ new_path: newPath })
+      const response = await post(`/${endpoint}/${encodePath(oldPath)}/rename`, {
+        body: { new_path: newPath },
+        responseKind: "json"
       })
 
       if (!response.ok) {
-        const data = await response.json()
+        const data = await response.json
         throw new Error(data.error || window.t("errors.failed_to_move"))
       }
 

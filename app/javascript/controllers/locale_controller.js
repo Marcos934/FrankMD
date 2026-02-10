@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { get, patch } from "@rails/request.js"
 
 export default class extends Controller {
   static targets = ["menu", "currentLocale"]
@@ -7,12 +8,12 @@ export default class extends Controller {
   // Available locales
   static locales = [
     { id: "en", name: "English", flag: "us" },
-    { id: "pt-BR", name: "Português (Brasil)", flag: "br" },
-    { id: "pt-PT", name: "Português (Portugal)", flag: "pt" },
-    { id: "es", name: "Español", flag: "es" },
-    { id: "he", name: "עברית", flag: "il" },
-    { id: "ja", name: "日本語", flag: "jp" },
-    { id: "ko", name: "한국어", flag: "kr" }
+    { id: "pt-BR", name: "Portugu\u00eas (Brasil)", flag: "br" },
+    { id: "pt-PT", name: "Portugu\u00eas (Portugal)", flag: "pt" },
+    { id: "es", name: "Espa\u00f1ol", flag: "es" },
+    { id: "he", name: "\u05e2\u05d1\u05e8\u05d9\u05ea", flag: "il" },
+    { id: "ja", name: "\u65e5\u672c\u8a9e", flag: "jp" },
+    { id: "ko", name: "\ud55c\uad6d\uc5b4", flag: "kr" }
   ]
 
   connect() {
@@ -40,11 +41,9 @@ export default class extends Controller {
   // Load translations from server
   async loadTranslations() {
     try {
-      const response = await fetch("/translations", {
-        headers: { "Accept": "application/json" }
-      })
+      const response = await get("/translations", { responseKind: "json" })
       if (response.ok) {
-        const data = await response.json()
+        const data = await response.json
         this.translations = data.translations
         this.currentLocaleId = data.locale
         // Make translations globally available
@@ -98,21 +97,16 @@ export default class extends Controller {
 
     this.configSaveTimeout = setTimeout(async () => {
       try {
-        const response = await fetch("/config", {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]')?.content
-          },
-          body: JSON.stringify({ locale: localeId })
+        const response = await patch("/config", {
+          body: { locale: localeId },
+          responseKind: "json"
         })
 
         if (response.ok) {
           // Reload page to apply new locale
           window.location.reload()
         } else {
-          console.warn("Failed to save locale config:", await response.text())
+          console.warn("Failed to save locale config:", await response.text)
         }
       } catch (error) {
         console.warn("Failed to save locale config:", error)
@@ -161,13 +155,13 @@ export default class extends Controller {
   getFlag(flagCode) {
     // Simple flag emoji based on country code
     const flags = {
-      us: `<span class="text-base">🇺🇸</span>`,
-      br: `<span class="text-base">🇧🇷</span>`,
-      pt: `<span class="text-base">🇵🇹</span>`,
-      es: `<span class="text-base">🇪🇸</span>`,
-      il: `<span class="text-base">🇮🇱</span>`,
-      jp: `<span class="text-base">🇯🇵</span>`,
-      kr: `<span class="text-base">🇰🇷</span>`
+      us: `<span class="text-base">\ud83c\uddfa\ud83c\uddf8</span>`,
+      br: `<span class="text-base">\ud83c\udde7\ud83c\uddf7</span>`,
+      pt: `<span class="text-base">\ud83c\uddf5\ud83c\uddf9</span>`,
+      es: `<span class="text-base">\ud83c\uddea\ud83c\uddf8</span>`,
+      il: `<span class="text-base">\ud83c\uddee\ud83c\uddf1</span>`,
+      jp: `<span class="text-base">\ud83c\uddef\ud83c\uddf5</span>`,
+      kr: `<span class="text-base">\ud83c\uddf0\ud83c\uddf7</span>`
     }
     return flags[flagCode] || ""
   }

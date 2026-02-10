@@ -1,6 +1,7 @@
 // Folder Images (File System Access API)
 // Handles browsing and selecting images from local filesystem folders
 
+import { post } from "@rails/request.js"
 import { escapeHtml } from "lib/text_utils"
 
 export class FolderImageSource {
@@ -179,25 +180,22 @@ export class FolderImageSource {
     }
   }
 
-  async upload(file, resize, uploadToS3, csrfToken) {
+  async upload(file, resize, uploadToS3) {
     const formData = new FormData()
     formData.append("file", file)
     if (resize) formData.append("resize", resize)
     if (uploadToS3) formData.append("upload_to_s3", "true")
 
-    const response = await fetch("/images/upload", {
-      method: "POST",
-      headers: {
-        "X-CSRF-Token": csrfToken
-      },
-      body: formData
+    const response = await post("/images/upload", {
+      body: formData,
+      responseKind: "json"
     })
 
     if (!response.ok) {
-      const data = await response.json()
+      const data = await response.json
       throw new Error(data.error || "Upload failed")
     }
 
-    return await response.json()
+    return await response.json
   }
 }

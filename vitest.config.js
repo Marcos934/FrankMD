@@ -12,6 +12,7 @@ export default defineConfig({
       'lib': path.resolve(__dirname, 'app/javascript/lib'),
       'marked': path.resolve(__dirname, 'test/javascript/mocks/marked.js'),
       '@hotwired/turbo-rails': path.resolve(__dirname, 'test/javascript/mocks/turbo-rails.js'),
+      '@rails/request.js': path.resolve(__dirname, 'test/javascript/mocks/requestjs.js'),
     },
   },
 })

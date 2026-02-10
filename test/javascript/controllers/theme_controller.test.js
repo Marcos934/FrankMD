@@ -30,7 +30,6 @@ describe("ThemeController", () => {
     })
 
     document.body.innerHTML = `
-      <meta name="csrf-token" content="test-token" />
       <div data-controller="theme" data-theme-initial-value="dark">
         <span data-theme-target="currentTheme"></span>
         <div data-theme-target="menu" class="hidden"></div>
@@ -242,37 +241,44 @@ describe("ThemeController", () => {
   describe("saveThemeConfig()", () => {
     it("calls fetch with correct parameters", async () => {
       vi.useFakeTimers()
-      controller.saveThemeConfig("nord")
 
-      vi.advanceTimersByTime(500)
-      await vi.runAllTimersAsync()
+      try {
+        controller.saveThemeConfig("nord")
 
-      expect(fetch).toHaveBeenCalledWith("/config", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "X-CSRF-Token": "test-token"
-        },
-        body: JSON.stringify({ theme: "nord" })
-      })
-      vi.useRealTimers()
+        vi.advanceTimersByTime(500)
+        await vi.runAllTimersAsync()
+
+        expect(fetch).toHaveBeenCalledWith("/config", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+          },
+          body: JSON.stringify({ theme: "nord" })
+        })
+      } finally {
+        vi.useRealTimers()
+      }
     })
 
     it("debounces multiple calls", async () => {
       vi.useFakeTimers()
-      controller.saveThemeConfig("nord")
-      controller.saveThemeConfig("gruvbox")
-      controller.saveThemeConfig("tokyo-night")
 
-      vi.advanceTimersByTime(500)
-      await vi.runAllTimersAsync()
+      try {
+        controller.saveThemeConfig("nord")
+        controller.saveThemeConfig("gruvbox")
+        controller.saveThemeConfig("tokyo-night")
 
-      expect(fetch).toHaveBeenCalledTimes(1)
-      expect(fetch).toHaveBeenCalledWith("/config", expect.objectContaining({
-        body: JSON.stringify({ theme: "tokyo-night" })
-      }))
-      vi.useRealTimers()
+        vi.advanceTimersByTime(500)
+        await vi.runAllTimersAsync()
+
+        expect(fetch).toHaveBeenCalledTimes(1)
+        expect(fetch).toHaveBeenCalledWith("/config", expect.objectContaining({
+          body: JSON.stringify({ theme: "tokyo-night" })
+        }))
+      } finally {
+        vi.useRealTimers()
+      }
     })
   })
 

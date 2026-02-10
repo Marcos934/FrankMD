@@ -1,5 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
-import { Turbo } from "@hotwired/turbo-rails"
+import { post, destroy } from "@rails/request.js"
 import { encodePath } from "lib/url_utils"
 
 // File Operations Controller
@@ -28,32 +28,11 @@ export default class extends Controller {
     this.setupDialogClickOutside()
   }
 
-  get csrfToken() {
-    return document.querySelector('meta[name="csrf-token"]')?.content
-  }
-
   get expandedFolders() {
     const appEl = document.querySelector('[data-controller~="app"]')
     if (!appEl) return ""
     const app = this.application.getControllerForElementAndIdentifier(appEl, "app")
     return app?.expandedFolders ? [...app.expandedFolders].join(",") : ""
-  }
-
-  get turboStreamHeaders() {
-    return {
-      "Accept": "text/vnd.turbo-stream.html, application/json",
-      "X-CSRF-Token": this.csrfToken
-    }
-  }
-
-  async processTurboStreamResponse(response) {
-    const contentType = response.headers.get("content-type") || ""
-    if (contentType.includes("turbo-stream")) {
-      const html = await response.text()
-      Turbo.renderStreamMessage(html)
-      return { turboStream: true }
-    }
-    return response.json()
   }
 
   setupContextMenuClose() {
@@ -237,36 +216,31 @@ export default class extends Controller {
     if (template === "hugo") {
       // Hugo posts: server generates path and content
       const title = name.replace(/\.md$/, "")
-      response = await fetch("/notes", {
-        method: "POST",
-        headers: {
-          ...this.turboStreamHeaders,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ template: "hugo", title, parent: parent || "", expanded })
+      response = await post("/notes", {
+        body: { template: "hugo", title, parent: parent || "", expanded },
+        responseKind: "turbo-stream"
       })
     } else {
       // Regular notes use simple filename
       const fileName = name.endsWith(".md") ? name : `${name}.md`
       const path = parent ? `${parent}/${fileName}` : fileName
 
-      response = await fetch(`/notes/${encodePath(path)}`, {
-        method: "POST",
-        headers: {
-          ...this.turboStreamHeaders,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ content: "", expanded })
+      response = await post(`/notes/${encodePath(path)}`, {
+        body: { content: "", expanded },
+        responseKind: "turbo-stream"
       })
     }
 
     if (!response.ok) {
-      const data = await response.json()
+      const data = await response.json
       throw new Error(data.error || window.t("errors.failed_to_create"))
     }
 
-    const data = await this.processTurboStreamResponse(response)
-    const path = data.turboStream ? this.inferCreatedPath(name, parent, template) : data.path
+    // Turbo Stream responses are auto-processed by request.js
+    // For JSON fallback, extract the path
+    const path = response.isTurboStream
+      ? this.inferCreatedPath(name, parent, template)
+      : (await response.json).path
     this.dispatch("file-created", { detail: { path } })
   }
 
@@ -292,17 +266,16 @@ export default class extends Controller {
     const path = parent ? `${parent}/${name}` : name
     const expanded = this.expandedFolders
 
-    const response = await fetch(`/folders/${encodePath(path)}?expanded=${encodeURIComponent(expanded)}`, {
-      method: "POST",
-      headers: this.turboStreamHeaders
+    const response = await post(`/folders/${encodePath(path)}?expanded=${encodeURIComponent(expanded)}`, {
+      responseKind: "turbo-stream"
     })
 
     if (!response.ok) {
-      const data = await response.json()
+      const data = await response.json
       throw new Error(data.error || window.t("errors.failed_to_create"))
     }
 
-    await this.processTurboStreamResponse(response)
+    // Turbo Stream response auto-processed by request.js
     this.dispatch("folder-created", { detail: { path } })
   }
 
@@ -358,21 +331,17 @@ export default class extends Controller {
     try {
       const endpoint = this.contextItem.type === "file" ? "notes" : "folders"
       const expanded = this.expandedFolders
-      const response = await fetch(`/${endpoint}/${encodePath(this.contextItem.path)}/rename`, {
-        method: "POST",
-        headers: {
-          ...this.turboStreamHeaders,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ new_path: newPath, expanded })
+      const response = await post(`/${endpoint}/${encodePath(this.contextItem.path)}/rename`, {
+        body: { new_path: newPath, expanded },
+        responseKind: "turbo-stream"
       })
 
       if (!response.ok) {
-        const data = await response.json()
+        const data = await response.json
         throw new Error(data.error || window.t("errors.failed_to_rename"))
       }
 
-      await this.processTurboStreamResponse(response)
+      // Turbo Stream response auto-processed by request.js
 
       this.dispatch("file-renamed", {
         detail: {
@@ -406,17 +375,16 @@ export default class extends Controller {
     try {
       const endpoint = this.contextItem.type === "file" ? "notes" : "folders"
       const expanded = this.expandedFolders
-      const response = await fetch(`/${endpoint}/${encodePath(this.contextItem.path)}?expanded=${encodeURIComponent(expanded)}`, {
-        method: "DELETE",
-        headers: this.turboStreamHeaders
+      const response = await destroy(`/${endpoint}/${encodePath(this.contextItem.path)}?expanded=${encodeURIComponent(expanded)}`, {
+        responseKind: "turbo-stream"
       })
 
       if (!response.ok) {
-        const data = await response.json()
+        const data = await response.json
         throw new Error(data.error || window.t("errors.failed_to_delete"))
       }
 
-      await this.processTurboStreamResponse(response)
+      // Turbo Stream response auto-processed by request.js
 
       this.dispatch("file-deleted", {
         detail: {

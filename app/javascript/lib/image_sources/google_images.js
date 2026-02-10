@@ -1,6 +1,7 @@
 // Google Image Search (Custom Search API)
 // Handles searching for images via Google Custom Search with infinite scroll
 
+import { get } from "@rails/request.js"
 import { escapeHtml } from "lib/text_utils"
 
 export class GoogleImageSource {
@@ -38,8 +39,8 @@ export class GoogleImageSource {
     this.loading = true
 
     try {
-      const response = await fetch(`/images/search_google?q=${encodeURIComponent(this.query)}&start=${this.nextStart}`)
-      const data = await response.json()
+      const response = await get(`/images/search_google?q=${encodeURIComponent(this.query)}&start=${this.nextStart}`, { responseKind: "json" })
+      const data = await response.json
 
       if (data.error) {
         this.loading = false

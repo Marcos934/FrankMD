@@ -313,11 +313,10 @@ describe("FolderImageSource", () => {
       })
 
       const file = new Blob(["test"], { type: "image/jpeg" })
-      const result = await source.upload(file, "0.5", true, "csrf-token")
+      const result = await source.upload(file, "0.5", true)
 
       expect(global.fetch).toHaveBeenCalledWith("/images/upload", expect.objectContaining({
-        method: "POST",
-        headers: { "X-CSRF-Token": "csrf-token" }
+        method: "POST"
       }))
 
       // Check FormData contents
@@ -335,7 +334,7 @@ describe("FolderImageSource", () => {
       })
 
       const file = new Blob(["test"])
-      await expect(source.upload(file, "", false, "token"))
+      await expect(source.upload(file, "", false))
         .rejects.toThrow("File too large")
     })
 
@@ -346,7 +345,7 @@ describe("FolderImageSource", () => {
       })
 
       const file = new Blob(["test"])
-      await expect(source.upload(file, "", false, "token"))
+      await expect(source.upload(file, "", false))
         .rejects.toThrow("Upload failed")
     })
   })

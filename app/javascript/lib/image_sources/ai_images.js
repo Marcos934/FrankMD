@@ -1,6 +1,7 @@
 // AI Image Generation
 // Handles generating images using AI (Gemini/Imagen)
 
+import { get, post } from "@rails/request.js"
 import { escapeHtml } from "lib/text_utils"
 import { encodePath } from "lib/url_utils"
 
@@ -29,11 +30,9 @@ export class AiImageSource {
 
   async loadConfig() {
     try {
-      const response = await fetch("/ai/image_config", {
-        headers: { "Accept": "application/json" }
-      })
+      const response = await get("/ai/image_config", { responseKind: "json" })
       if (response.ok) {
-        const config = await response.json()
+        const config = await response.json
         this.enabled = config.enabled
         this.model = config.model
       }
@@ -43,7 +42,7 @@ export class AiImageSource {
     return { enabled: this.enabled, model: this.model }
   }
 
-  async generate(prompt, csrfToken) {
+  async generate(prompt) {
     if (!prompt) {
       return { error: "Please enter a prompt describing the image you want to generate" }
     }
@@ -60,17 +59,13 @@ export class AiImageSource {
         requestBody.reference_image_path = this.refImage.path
       }
 
-      const response = await fetch("/ai/generate_image", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken
-        },
-        body: JSON.stringify(requestBody),
+      const response = await post("/ai/generate_image", {
+        body: requestBody,
+        responseKind: "json",
         signal: this.abortController.signal
       })
 
-      const data = await response.json()
+      const data = await response.json
 
       if (data.error) {
         return { error: data.error }
@@ -120,15 +115,13 @@ export class AiImageSource {
   async loadRefImages(search = "") {
     try {
       const url = search ? `/images?search=${encodeURIComponent(search)}` : "/images"
-      const response = await fetch(url, {
-        headers: { "Accept": "application/json" }
-      })
+      const response = await get(url, { responseKind: "json" })
 
       if (!response.ok) {
         throw new Error("Failed to load images")
       }
 
-      return await response.json()
+      return await response.json
     } catch (error) {
       console.error("Error loading reference images:", error)
       return { error: "Error loading images" }
@@ -157,7 +150,7 @@ export class AiImageSource {
     container.innerHTML = html
   }
 
-  async save(uploadToS3, csrfToken) {
+  async save(uploadToS3) {
     if (!this.generatedData) {
       return { error: "No generated image data available" }
     }
@@ -165,44 +158,36 @@ export class AiImageSource {
     try {
       if (this.generatedData.data) {
         // Base64 image data
-        const response = await fetch("/images/upload_base64", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": csrfToken
-          },
-          body: JSON.stringify({
+        const response = await post("/images/upload_base64", {
+          body: {
             data: this.generatedData.data,
             mime_type: this.generatedData.mime_type,
             filename: `ai_${Date.now()}.png`,
             upload_to_s3: uploadToS3
-          })
+          },
+          responseKind: "json"
         })
 
         if (!response.ok) {
-          const data = await response.json()
+          const data = await response.json
           throw new Error(data.error || "Failed to save image")
         }
 
-        return await response.json()
+        return await response.json
       } else if (this.generatedData.url) {
         // URL image
         if (uploadToS3) {
-          const response = await fetch("/images/upload_external_to_s3", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-CSRF-Token": csrfToken
-            },
-            body: JSON.stringify({ url: this.generatedData.url })
+          const response = await post("/images/upload_external_to_s3", {
+            body: { url: this.generatedData.url },
+            responseKind: "json"
           })
 
           if (!response.ok) {
-            const data = await response.json()
+            const data = await response.json
             throw new Error(data.error || "Failed to upload to S3")
           }
 
-          return await response.json()
+          return await response.json
         } else {
           return { url: this.generatedData.url }
         }

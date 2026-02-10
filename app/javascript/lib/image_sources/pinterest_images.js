@@ -1,6 +1,7 @@
 // Pinterest Image Search
 // Handles searching for images via Pinterest scraping
 
+import { get } from "@rails/request.js"
 import { escapeHtml } from "lib/text_utils"
 
 export class PinterestImageSource {
@@ -18,8 +19,8 @@ export class PinterestImageSource {
     }
 
     try {
-      const response = await fetch(`/images/search_pinterest?q=${encodeURIComponent(query)}`)
-      const data = await response.json()
+      const response = await get(`/images/search_pinterest?q=${encodeURIComponent(query)}`, { responseKind: "json" })
+      const data = await response.json
 
       if (data.error) {
         this.results = []

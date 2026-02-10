@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { get } from "@rails/request.js"
 import { normalizeLineNumberMode } from "lib/line_numbers"
 
 // EditorConfigController
@@ -6,6 +7,8 @@ import { normalizeLineNumberMode } from "lib/line_numbers"
 // Applies settings to CodeMirror, preview, and CSS custom properties.
 
 export default class extends Controller {
+  static outlets = ["codemirror", "preview"]
+
   static values = {
     font: { type: String, default: "cascadia-code" },
     fontSize: { type: Number, default: 14 },
@@ -106,9 +109,9 @@ export default class extends Controller {
 
   async reload() {
     try {
-      const response = await fetch("/config/editor")
+      const response = await get("/config/editor")
       if (response.ok) {
-        const html = await response.text()
+        const html = await response.text
         this.element.outerHTML = html
       }
     } catch (error) {
@@ -116,23 +119,10 @@ export default class extends Controller {
     }
   }
 
-  // === Controller Getters ===
+  // === Controller Getters (via Stimulus Outlets) ===
 
-  getCodemirrorController() {
-    const el = document.querySelector('[data-controller~="codemirror"]')
-    if (el) {
-      return this.application.getControllerForElementAndIdentifier(el, "codemirror")
-    }
-    return null
-  }
-
-  getPreviewController() {
-    const el = document.querySelector('[data-controller~="preview"]')
-    if (el) {
-      return this.application.getControllerForElementAndIdentifier(el, "preview")
-    }
-    return null
-  }
+  getCodemirrorController() { return this.hasCodemirrorOutlet ? this.codemirrorOutlet : null }
+  getPreviewController() { return this.hasPreviewOutlet ? this.previewOutlet : null }
 
   // === Public Getters for App Controller ===
 

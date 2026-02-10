@@ -73,7 +73,10 @@ describe("VideoDialogController", () => {
     })
 
     it("checks YouTube API availability", () => {
-      expect(global.fetch).toHaveBeenCalledWith("/youtube/config")
+      expect(global.fetch).toHaveBeenCalledWith("/youtube/config", {
+        method: "GET",
+        headers: { "Accept": "application/json" }
+      })
     })
   })
 
@@ -337,33 +340,35 @@ describe("VideoDialogController", () => {
 
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({
-          videos: [
-            { id: "vid1", title: "Video 1", channel: "Channel", thumbnail: "thumb.jpg" }
-          ]
-        })
+        text: () => Promise.resolve('<button data-index="0" data-video-id="vid1" data-video-title="Video 1" data-action="click->video-dialog#selectYoutubeVideo">Video 1</button>')
       })
 
       await controller.searchYoutube()
 
-      expect(global.fetch).toHaveBeenCalledWith("/youtube/search?q=test%20query")
+      expect(global.fetch).toHaveBeenCalledWith("/youtube/search?q=test%20query", {
+        method: "GET",
+        headers: {}
+      })
     })
 
-    it("stores search results", async () => {
+    it("stores search results from HTML response", async () => {
       controller.youtubeApiEnabled = true
       controller.youtubeSearchInputTarget.value = "test"
 
-      const mockVideos = [
-        { id: "vid1", title: "Video 1", channel: "Channel", thumbnail: "thumb.jpg" }
-      ]
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({ videos: mockVideos })
+        text: () => Promise.resolve(
+          '<button data-index="0" data-video-id="vid1" data-video-title="Video 1" data-action="click->video-dialog#selectYoutubeVideo">Video 1</button>' +
+          '<button data-index="1" data-video-id="vid2" data-video-title="Video 2" data-action="click->video-dialog#selectYoutubeVideo">Video 2</button>'
+        )
       })
 
       await controller.searchYoutube()
 
-      expect(controller.youtubeSearchResults).toEqual(mockVideos)
+      expect(controller.youtubeSearchResults).toEqual([
+        { id: "vid1", title: "Video 1" },
+        { id: "vid2", title: "Video 2" }
+      ])
     })
 
     it("handles search errors", async () => {
@@ -384,7 +389,7 @@ describe("VideoDialogController", () => {
 
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({ videos: [] })
+        text: () => Promise.resolve("")
       })
 
       await controller.searchYoutube()
@@ -393,36 +398,40 @@ describe("VideoDialogController", () => {
     })
   })
 
-  describe("renderYoutubeResults()", () => {
-    it("clears results when empty", () => {
-      controller.youtubeSearchResults = []
-      controller.renderYoutubeResults()
+  describe("updateYoutubeSelection()", () => {
+    it("does nothing when results are empty", () => {
+      controller.youtubeSearchResultsTarget.innerHTML = ""
+      controller.updateYoutubeSelection()
 
       expect(controller.youtubeSearchResultsTarget.innerHTML).toBe("")
     })
 
-    it("renders video cards", () => {
+    it("highlights selected video button", () => {
+      controller.youtubeSearchResultsTarget.innerHTML =
+        '<button data-index="0" data-video-id="vid1" data-video-title="Video 1">Video 1</button>' +
+        '<button data-index="1" data-video-id="vid2" data-video-title="Video 2">Video 2</button>'
       controller.youtubeSearchResults = [
-        { id: "vid1", title: "Test Video", channel: "Test Channel", thumbnail: "https://example.com/thumb.jpg" }
-      ]
-      controller.renderYoutubeResults()
-
-      const html = controller.youtubeSearchResultsTarget.innerHTML
-      expect(html).toContain("vid1")
-      expect(html).toContain("Test Video")
-      expect(html).toContain("Test Channel")
-    })
-
-    it("highlights selected video", () => {
-      controller.youtubeSearchResults = [
-        { id: "vid1", title: "Video 1", channel: "Channel", thumbnail: "thumb.jpg" },
-        { id: "vid2", title: "Video 2", channel: "Channel", thumbnail: "thumb.jpg" }
+        { id: "vid1", title: "Video 1" },
+        { id: "vid2", title: "Video 2" }
       ]
       controller.selectedYoutubeIndex = 1
-      controller.renderYoutubeResults()
+      controller.updateYoutubeSelection()
 
       const buttons = controller.youtubeSearchResultsTarget.querySelectorAll("button")
-      expect(buttons[1].className).toContain("ring-2")
+      expect(buttons[0].classList.contains("ring-2")).toBe(false)
+      expect(buttons[1].classList.contains("ring-2")).toBe(true)
+      expect(buttons[1].classList.contains("ring-[var(--theme-accent)]")).toBe(true)
+    })
+
+    it("removes highlight when index is -1", () => {
+      controller.youtubeSearchResultsTarget.innerHTML =
+        '<button data-index="0" data-video-id="vid1" data-video-title="Video 1" class="ring-2 ring-[var(--theme-accent)]">Video 1</button>'
+      controller.youtubeSearchResults = [{ id: "vid1", title: "Video 1" }]
+      controller.selectedYoutubeIndex = -1
+      controller.updateYoutubeSelection()
+
+      const buttons = controller.youtubeSearchResultsTarget.querySelectorAll("button")
+      expect(buttons[0].classList.contains("ring-2")).toBe(false)
     })
   })
 
@@ -499,10 +508,11 @@ describe("VideoDialogController", () => {
     })
 
     it("navigates to first result on ArrowDown", () => {
+      controller.youtubeSearchResultsTarget.innerHTML =
+        '<button data-index="0" data-video-id="vid1" data-video-title="Video">Video</button>'
       controller.youtubeSearchResults = [
-        { id: "vid1", title: "Video", channel: "Ch", thumbnail: "t.jpg" }
+        { id: "vid1", title: "Video" }
       ]
-      controller.renderYoutubeResults()
 
       const event = { key: "ArrowDown", preventDefault: vi.fn() }
       controller.onYoutubeSearchKeydown(event)

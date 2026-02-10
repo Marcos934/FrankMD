@@ -1,0 +1,35 @@
+<% if results.empty? %>
+  <div class="px-4 py-8 text-center text-[var(--theme-text-muted)] text-sm">
+    <%= t("status.no_matches") %>
+  </div>
+<% else %>
+  <% results.each_with_index do |result, index| %>
+    <button
+      type="button"
+      class="w-full text-left border-b border-[var(--theme-border)] last:border-b-0 <%= index == 0 ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-text)]' : 'hover:bg-[var(--theme-bg-hover)]' %>"
+      data-index="<%= index %>"
+      data-path="<%= result[:path] %>"
+      data-line="<%= result[:line_number] %>"
+      data-action="click->content-search#selectFromClick mouseenter->content-search#onHover"
+    >
+      <div class="px-3 py-2">
+        <div class="flex items-center gap-2 mb-1">
+          <svg class="w-4 h-4 flex-shrink-0 <%= index == 0 ? '' : 'text-[var(--theme-text-muted)]' %>" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span class="font-medium truncate"><%= result[:name] %></span>
+          <span class="text-xs <%= index == 0 ? 'opacity-80' : 'text-[var(--theme-text-muted)]' %>">:<%= result[:line_number] %></span>
+          <span class="text-xs <%= index == 0 ? 'opacity-70' : 'text-[var(--theme-text-faint)]' %> truncate ml-auto"><%= result[:path].sub(/\.md$/, "") %></span>
+        </div>
+        <div class="font-mono text-xs leading-relaxed overflow-hidden <%= index == 0 ? 'bg-black/20' : 'bg-[var(--theme-bg-tertiary)]' %> rounded p-2">
+          <% result[:context].each do |line| %>
+            <div class="flex <%= line[:is_match] ? 'bg-[var(--theme-selection)] text-[var(--theme-selection-text)]' : '' %>">
+              <span class="w-10 flex-shrink-0 text-right pr-2 text-[var(--theme-text-faint)] select-none"><%= line[:line_number] %></span>
+              <span class="flex-1 overflow-hidden text-ellipsis"><%= line[:content] %></span>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    </button>
+  <% end %>
+<% end %>

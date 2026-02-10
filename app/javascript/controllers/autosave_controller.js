@@ -1,9 +1,11 @@
 import { Controller } from "@hotwired/stimulus"
+import { patch } from "@rails/request.js"
 import { encodePath } from "lib/url_utils"
 import { undo } from "@codemirror/commands"
 
 export default class extends Controller {
   static targets = ["contentLossBanner", "saveStatus"]
+  static outlets = ["codemirror", "offline-backup", "recovery-diff"]
 
   // Auto-save configuration
   static SAVE_DEBOUNCE_MS = 2000      // Wait 2 seconds after last keystroke
@@ -29,27 +31,11 @@ export default class extends Controller {
     if (this._offlineBackupTimeout) clearTimeout(this._offlineBackupTimeout)
   }
 
-  // === Controller Lookups ===
+  // === Controller Getters (via Stimulus Outlets) ===
 
-  _getController(name, selector) {
-    const element = document.querySelector(selector)
-    if (element) {
-      return this.application.getControllerForElementAndIdentifier(element, name)
-    }
-    return null
-  }
-
-  getCodemirrorController() {
-    return this._getController("codemirror", '[data-controller~="codemirror"]')
-  }
-
-  getOfflineBackupController() {
-    return this._getController("offline-backup", '[data-controller~="offline-backup"]')
-  }
-
-  getRecoveryDiffController() {
-    return this._getController("recovery-diff", '[data-controller~="recovery-diff"]')
-  }
+  getCodemirrorController() { return this.hasCodemirrorOutlet ? this.codemirrorOutlet : null }
+  getOfflineBackupController() { return this.hasOfflineBackupOutlet ? this.offlineBackupOutlet : null }
+  getRecoveryDiffController() { return this.hasRecoveryDiffOutlet ? this.recoveryDiffOutlet : null }
 
   // === Public API (called by app controller) ===
 
@@ -175,13 +161,9 @@ export default class extends Controller {
 
     this._isSaving = true
     try {
-      const response = await fetch(`/notes/${encodePath(this.currentFile)}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": this.csrfToken
-        },
-        body: JSON.stringify({ content })
+      const response = await patch(`/notes/${encodePath(this.currentFile)}`, {
+        body: { content },
+        responseKind: "json"
       })
 
       if (!response.ok) {
@@ -316,10 +298,4 @@ export default class extends Controller {
     this.saveStatusTarget.classList.toggle("dark:text-red-400", isError)
   }
 
-  // === Utilities ===
-
-  get csrfToken() {
-    const meta = document.querySelector('meta[name="csrf-token"]')
-    return meta ? meta.content : ""
-  }
 }

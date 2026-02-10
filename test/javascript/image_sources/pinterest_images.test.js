@@ -55,7 +55,7 @@ describe("PinterestImageSource", () => {
 
       const result = await source.search("home decor")
 
-      expect(global.fetch).toHaveBeenCalledWith("/images/search_pinterest?q=home%20decor")
+      expect(global.fetch).toHaveBeenCalledWith("/images/search_pinterest?q=home%20decor", expect.objectContaining({ method: "GET" }))
       expect(result.images).toEqual(mockImages)
       expect(result.message).toBe("Found 2 images - click to select")
       expect(source.results).toEqual(mockImages)

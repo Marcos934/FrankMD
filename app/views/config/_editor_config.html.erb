@@ -1,5 +1,7 @@
 <div id="editor-config"
      data-controller="editor-config"
+     data-editor-config-codemirror-outlet='[data-controller~="codemirror"]'
+     data-editor-config-preview-outlet='[data-controller~="preview"]'
      data-editor-config-font-value="<%= @config_obj.get('editor_font') || 'cascadia-code' %>"
      data-editor-config-font-size-value="<%= @config_obj.get('editor_font_size') || 14 %>"
      data-editor-config-editor-width-value="<%= [40, [(@config_obj.get('editor_width') || 72).to_i, 200].min].max %>"

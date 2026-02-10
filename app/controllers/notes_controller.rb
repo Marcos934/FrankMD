@@ -124,7 +124,11 @@ class NotesController < ApplicationController
   def search
     query = params[:q].to_s
     results = Note.search(query, context_lines: 3, max_results: 20)
-    render json: results
+
+    respond_to do |format|
+      format.html { render partial: "notes/search_results", locals: { results: results }, layout: false }
+      format.json { render json: results }
+    end
   end
 
   private

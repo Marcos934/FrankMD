@@ -55,7 +55,7 @@ describe("WebImageSource", () => {
 
       const result = await source.search("cats")
 
-      expect(global.fetch).toHaveBeenCalledWith("/images/search_web?q=cats")
+      expect(global.fetch).toHaveBeenCalledWith("/images/search_web?q=cats", expect.objectContaining({ method: "GET" }))
       expect(result.images).toEqual(mockImages)
       expect(result.message).toBe("Found 2 images - click to select")
       expect(source.results).toEqual(mockImages)
@@ -68,7 +68,7 @@ describe("WebImageSource", () => {
 
       await source.search("cats & dogs")
 
-      expect(global.fetch).toHaveBeenCalledWith("/images/search_web?q=cats%20%26%20dogs")
+      expect(global.fetch).toHaveBeenCalledWith("/images/search_web?q=cats%20%26%20dogs", expect.objectContaining({ method: "GET" }))
     })
 
     it("handles API error response", async () => {
@@ -203,16 +203,16 @@ describe("WebImageSource", () => {
         json: () => Promise.resolve({ url: "https://s3.example.com/uploaded.jpg" })
       })
 
-      const result = await source.uploadToS3("https://example.com/image.jpg", "0.5", "csrf-token")
+      const result = await source.uploadToS3("https://example.com/image.jpg", "0.5")
 
-      expect(global.fetch).toHaveBeenCalledWith("/images/upload_external_to_s3", {
+      expect(global.fetch).toHaveBeenCalledWith("/images/upload_external_to_s3", expect.objectContaining({
         method: "POST",
-        headers: {
+        headers: expect.objectContaining({
           "Content-Type": "application/json",
-          "X-CSRF-Token": "csrf-token"
-        },
+          "Accept": "application/json"
+        }),
         body: JSON.stringify({ url: "https://example.com/image.jpg", resize: "0.5" })
-      })
+      }))
       expect(result.url).toBe("https://s3.example.com/uploaded.jpg")
     })
 
@@ -222,7 +222,7 @@ describe("WebImageSource", () => {
         json: () => Promise.resolve({ error: "Image too large" })
       })
 
-      await expect(source.uploadToS3("https://example.com/big.jpg", "", "token"))
+      await expect(source.uploadToS3("https://example.com/big.jpg", ""))
         .rejects.toThrow("Image too large")
     })
 
@@ -232,7 +232,7 @@ describe("WebImageSource", () => {
         json: () => Promise.resolve({})
       })
 
-      await expect(source.uploadToS3("https://example.com/image.jpg", "", "token"))
+      await expect(source.uploadToS3("https://example.com/image.jpg", ""))
         .rejects.toThrow("Failed to upload to S3")
     })
   })

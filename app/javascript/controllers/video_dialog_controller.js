@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { get } from "@rails/request.js"
 import { escapeHtml } from "lib/text_utils"
 import { extractYouTubeId } from "lib/url_utils"
 
@@ -55,9 +56,9 @@ export default class extends Controller {
 
   async checkYoutubeApiEnabled() {
     try {
-      const response = await fetch("/youtube/config")
+      const response = await get("/youtube/config", { responseKind: "json" })
       if (response.ok) {
-        const data = await response.json()
+        const data = await response.json
         this.youtubeApiEnabled = data.enabled
       }
     } catch (error) {
@@ -308,7 +309,7 @@ export default class extends Controller {
     } else if (event.key === "ArrowDown" && this.youtubeSearchResults.length > 0) {
       event.preventDefault()
       this.selectedYoutubeIndex = 0
-      this.renderYoutubeResults()
+      this.updateYoutubeSelection()
       this.youtubeSearchResultsTarget.querySelector("[data-index='0']")?.focus()
     }
   }
@@ -331,21 +332,29 @@ export default class extends Controller {
     this.youtubeSearchResultsTarget.innerHTML = ""
 
     try {
-      const response = await fetch(`/youtube/search?q=${encodeURIComponent(query)}`)
-      const data = await response.json()
+      const response = await get(`/youtube/search?q=${encodeURIComponent(query)}`, { responseKind: "html" })
 
-      if (data.error) {
-        this.youtubeSearchStatusTarget.innerHTML = `<span class="text-red-500">${data.error}</span>`
+      if (!response.ok) {
+        const errorData = await response.json
+        this.youtubeSearchStatusTarget.innerHTML = `<span class="text-red-500">${errorData?.error || window.t("status.search_failed_retry")}</span>`
         this.youtubeSearchResults = []
       } else {
-        this.youtubeSearchResults = data.videos || []
+        const html = await response.text
+        this.youtubeSearchResultsTarget.innerHTML = html
+
+        // Extract results data from rendered buttons
+        const buttons = this.youtubeSearchResultsTarget.querySelectorAll("[data-video-id]")
+        this.youtubeSearchResults = Array.from(buttons).map(btn => ({
+          id: btn.dataset.videoId,
+          title: btn.dataset.videoTitle
+        }))
+
         if (this.youtubeSearchResults.length === 0) {
           this.youtubeSearchStatusTarget.textContent = window.t("status.no_videos_found")
         } else {
           this.youtubeSearchStatusTarget.textContent = window.t("status.found_videos", { count: this.youtubeSearchResults.length })
         }
         this.selectedYoutubeIndex = -1
-        this.renderYoutubeResults()
       }
     } catch (error) {
       console.error("YouTube search error:", error)
@@ -356,47 +365,6 @@ export default class extends Controller {
     }
   }
 
-  renderYoutubeResults() {
-    if (this.youtubeSearchResults.length === 0) {
-      this.youtubeSearchResultsTarget.innerHTML = ""
-      return
-    }
-
-    this.youtubeSearchResultsTarget.innerHTML = this.youtubeSearchResults.map((video, index) => {
-      const isSelected = index === this.selectedYoutubeIndex
-      const selectedClass = isSelected ? "ring-2 ring-[var(--theme-accent)]" : ""
-
-      return `
-        <button
-          type="button"
-          data-index="${index}"
-          data-video-id="${video.id}"
-          data-video-title="${escapeHtml(video.title)}"
-          data-action="click->video-dialog#selectYoutubeVideo keydown->video-dialog#onYoutubeResultKeydown"
-          class="flex flex-col rounded-lg overflow-hidden bg-[var(--theme-bg-tertiary)] hover:bg-[var(--theme-bg-hover)] transition-colors ${selectedClass} focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)]"
-        >
-          <div class="relative aspect-video bg-[var(--theme-bg-tertiary)]">
-            <img
-              src="${video.thumbnail}"
-              alt="${escapeHtml(video.title)}"
-              class="w-full h-full object-cover"
-              onerror="this.style.display='none'"
-            >
-            <div class="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity bg-black/30">
-              <svg class="w-12 h-12 text-white drop-shadow-lg" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-              </svg>
-            </div>
-          </div>
-          <div class="p-2">
-            <div class="text-xs font-medium text-[var(--theme-text-primary)] line-clamp-2">${escapeHtml(video.title)}</div>
-            <div class="text-xs text-[var(--theme-text-muted)] truncate mt-0.5">${escapeHtml(video.channel)}</div>
-          </div>
-        </button>
-      `
-    }).join("")
-  }
-
   onYoutubeResultKeydown(event) {
     const currentIndex = parseInt(event.currentTarget.dataset.index)
 
@@ -404,7 +372,7 @@ export default class extends Controller {
       event.preventDefault()
       const nextIndex = Math.min(currentIndex + (event.key === "ArrowDown" ? 2 : 1), this.youtubeSearchResults.length - 1)
       this.selectedYoutubeIndex = nextIndex
-      this.renderYoutubeResults()
+      this.updateYoutubeSelection()
       this.youtubeSearchResultsTarget.querySelector(`[data-index='${nextIndex}']`)?.focus()
     } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
       event.preventDefault()
@@ -412,10 +380,10 @@ export default class extends Controller {
       if (event.key === "ArrowUp" && currentIndex < 2) {
         this.youtubeSearchInputTarget.focus()
         this.selectedYoutubeIndex = -1
-        this.renderYoutubeResults()
+        this.updateYoutubeSelection()
       } else {
         this.selectedYoutubeIndex = prevIndex
-        this.renderYoutubeResults()
+        this.updateYoutubeSelection()
         this.youtubeSearchResultsTarget.querySelector(`[data-index='${prevIndex}']`)?.focus()
       }
     } else if (event.key === "Enter") {
@@ -424,8 +392,18 @@ export default class extends Controller {
     } else if (event.key === "Escape") {
       this.youtubeSearchInputTarget.focus()
       this.selectedYoutubeIndex = -1
-      this.renderYoutubeResults()
+      this.updateYoutubeSelection()
     }
+  }
+
+  updateYoutubeSelection() {
+    this.youtubeSearchResultsTarget.querySelectorAll("[data-index]").forEach((btn, index) => {
+      if (index === this.selectedYoutubeIndex) {
+        btn.classList.add("ring-2", "ring-[var(--theme-accent)]")
+      } else {
+        btn.classList.remove("ring-2", "ring-[var(--theme-accent)]")
+      }
+    })
   }
 
   selectYoutubeVideo(event) {

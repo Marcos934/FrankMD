@@ -46,9 +46,10 @@ describe("LocalImageSource", () => {
 
       const result = await source.load()
 
-      expect(global.fetch).toHaveBeenCalledWith("/images", {
-        headers: { "Accept": "application/json" }
-      })
+      expect(global.fetch).toHaveBeenCalledWith("/images", expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({ "Accept": "application/json" })
+      }))
       expect(result).toEqual(mockImages)
     })
 
@@ -60,9 +61,10 @@ describe("LocalImageSource", () => {
 
       await source.load("sunset")
 
-      expect(global.fetch).toHaveBeenCalledWith("/images?search=sunset", {
-        headers: { "Accept": "application/json" }
-      })
+      expect(global.fetch).toHaveBeenCalledWith("/images?search=sunset", expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({ "Accept": "application/json" })
+      }))
     })
 
     it("encodes search query", async () => {
@@ -73,9 +75,10 @@ describe("LocalImageSource", () => {
 
       await source.load("cats & dogs")
 
-      expect(global.fetch).toHaveBeenCalledWith("/images?search=cats%20%26%20dogs", {
-        headers: { "Accept": "application/json" }
-      })
+      expect(global.fetch).toHaveBeenCalledWith("/images?search=cats%20%26%20dogs", expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({ "Accept": "application/json" })
+      }))
     })
 
     it("handles failed response", async () => {
@@ -208,16 +211,16 @@ describe("LocalImageSource", () => {
         json: () => Promise.resolve({ url: "https://s3.example.com/image.jpg" })
       })
 
-      const result = await source.uploadToS3("photos/cat.jpg", "0.5", "csrf-token-123")
+      const result = await source.uploadToS3("photos/cat.jpg", "0.5")
 
-      expect(global.fetch).toHaveBeenCalledWith("/images/upload_to_s3", {
+      expect(global.fetch).toHaveBeenCalledWith("/images/upload_to_s3", expect.objectContaining({
         method: "POST",
-        headers: {
+        headers: expect.objectContaining({
           "Content-Type": "application/json",
-          "X-CSRF-Token": "csrf-token-123"
-        },
+          "Accept": "application/json"
+        }),
         body: JSON.stringify({ path: "photos/cat.jpg", resize: "0.5" })
-      })
+      }))
       expect(result.url).toBe("https://s3.example.com/image.jpg")
     })
 
@@ -227,7 +230,7 @@ describe("LocalImageSource", () => {
         json: () => Promise.resolve({ error: "S3 bucket not configured" })
       })
 
-      await expect(source.uploadToS3("test.jpg", "", "token"))
+      await expect(source.uploadToS3("test.jpg", ""))
         .rejects.toThrow("S3 bucket not configured")
     })
 
@@ -237,7 +240,7 @@ describe("LocalImageSource", () => {
         json: () => Promise.resolve({})
       })
 
-      await expect(source.uploadToS3("test.jpg", "", "token"))
+      await expect(source.uploadToS3("test.jpg", ""))
         .rejects.toThrow("Failed to upload to S3")
     })
   })

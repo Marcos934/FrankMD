@@ -22,10 +22,6 @@ export default class extends Controller {
     this.source.cleanup()
   }
 
-  get csrfToken() {
-    return document.querySelector('meta[name="csrf-token"]')?.content || ""
-  }
-
   get s3Option() {
     const el = this.element.querySelector('[data-controller="s3-option"]')
     return el ? this.application.getControllerForElementAndIdentifier(el, "s3-option") : null
@@ -121,8 +117,7 @@ export default class extends Controller {
     const data = await this.source.upload(
       this.selectedImage.file,
       resizeRatio,
-      uploadToS3,
-      this.csrfToken
+      uploadToS3
     )
     return data.url
   }

@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { get, post } from "@rails/request.js"
 import { computeWordDiff } from "lib/diff_utils"
 
 // AI Grammar Controller
@@ -31,9 +32,9 @@ export default class extends Controller {
 
   async checkAiAvailability() {
     try {
-      const response = await fetch("/ai/config")
+      const response = await get("/ai/config", { responseKind: "json" })
       if (response.ok) {
-        const data = await response.json()
+        const data = await response.json
         this.aiEnabled = data.enabled
         this.aiProvider = data.provider
         this.aiModel = data.model
@@ -44,10 +45,6 @@ export default class extends Controller {
       this.aiProvider = null
       this.aiModel = null
     }
-  }
-
-  get csrfToken() {
-    return document.querySelector('meta[name="csrf-token"]')?.content
   }
 
   // Called by app_controller with file path
@@ -95,17 +92,13 @@ export default class extends Controller {
     document.addEventListener("keydown", this.boundHandleEscKey)
 
     try {
-      const response = await fetch("/ai/fix_grammar", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": this.csrfToken
-        },
-        body: JSON.stringify({ path: filePath }),
+      const response = await post("/ai/fix_grammar", {
+        body: { path: filePath },
+        responseKind: "json",
         signal: this.aiAbortController.signal
       })
 
-      const data = await response.json()
+      const data = await response.json
 
       if (data.error) {
         alert(`${window.t("errors.failed_to_process_ai")}: ${data.error}`)

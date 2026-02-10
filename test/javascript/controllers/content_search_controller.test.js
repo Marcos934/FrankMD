@@ -32,10 +32,10 @@ describe("ContentSearchController", () => {
     // Mock scrollIntoView (not available in jsdom)
     Element.prototype.scrollIntoView = vi.fn()
 
-    // Mock fetch for search
+    // Mock fetch for search (returns HTML, not JSON)
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve([])
+      text: () => Promise.resolve("")
     })
 
     element = document.querySelector('[data-controller="content-search"]')
@@ -150,39 +150,40 @@ describe("ContentSearchController", () => {
     it("fetches search results", async () => {
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve([
-          { path: "test.md", name: "test", line_number: 5, context: [] }
-        ])
+        text: () => Promise.resolve('<button data-index="0" data-path="test.md" data-line="5">test</button>')
       })
 
       await controller.performSearch("hello")
 
       expect(global.fetch).toHaveBeenCalledWith(
         "/notes/search?q=hello",
-        expect.objectContaining({ headers: { Accept: "application/json" } })
+        expect.objectContaining({ method: "GET" })
       )
     })
 
-    it("updates results data", async () => {
-      const results = [
-        { path: "file1.md", name: "file1", line_number: 10, context: [] },
-        { path: "file2.md", name: "file2", line_number: 20, context: [] }
-      ]
+    it("updates results data from HTML response", async () => {
+      const html = [
+        '<button data-index="0" data-path="file1.md" data-line="10">file1</button>',
+        '<button data-index="1" data-path="file2.md" data-line="20">file2</button>'
+      ].join("")
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve(results)
+        text: () => Promise.resolve(html)
       })
 
       await controller.performSearch("test")
 
-      expect(controller.searchResultsData).toEqual(results)
+      expect(controller.searchResultsData).toEqual([
+        { path: "file1.md", line_number: 10 },
+        { path: "file2.md", line_number: 20 }
+      ])
     })
 
     it("resets selected index", async () => {
       controller.selectedIndex = 3
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve([])
+        text: () => Promise.resolve("")
       })
 
       await controller.performSearch("test")
@@ -191,12 +192,13 @@ describe("ContentSearchController", () => {
     })
 
     it("shows match count in status", async () => {
+      const html = [
+        '<button data-index="0" data-path="file1.md" data-line="1">file1</button>',
+        '<button data-index="1" data-path="file2.md" data-line="2">file2</button>'
+      ].join("")
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve([
-          { path: "file1.md", name: "file1", line_number: 1, context: [] },
-          { path: "file2.md", name: "file2", line_number: 2, context: [] }
-        ])
+        text: () => Promise.resolve(html)
       })
 
       await controller.performSearch("test")
@@ -207,7 +209,7 @@ describe("ContentSearchController", () => {
     it("shows no matches message", async () => {
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve([])
+        text: () => Promise.resolve("")
       })
 
       await controller.performSearch("xyz")
@@ -221,64 +223,6 @@ describe("ContentSearchController", () => {
       await controller.performSearch("test")
 
       expect(controller.statusTarget.textContent).toBe("status.search_error")
-    })
-  })
-
-  describe("renderResults()", () => {
-    it("shows no matches message when empty", () => {
-      controller.searchResultsData = []
-      controller.renderResults()
-
-      expect(controller.resultsTarget.innerHTML).toContain("status.no_matches")
-    })
-
-    it("renders result items", () => {
-      controller.searchResultsData = [
-        {
-          path: "notes/test.md",
-          name: "test",
-          line_number: 15,
-          context: [
-            { line_number: 14, content: "before", is_match: false },
-            { line_number: 15, content: "matching line", is_match: true },
-            { line_number: 16, content: "after", is_match: false }
-          ]
-        }
-      ]
-      controller.renderResults()
-
-      const buttons = controller.resultsTarget.querySelectorAll("button")
-      expect(buttons.length).toBe(1)
-      expect(controller.resultsTarget.innerHTML).toContain("test")
-      expect(controller.resultsTarget.innerHTML).toContain(":15")
-    })
-
-    it("highlights selected item", () => {
-      controller.searchResultsData = [
-        { path: "file1.md", name: "file1", line_number: 1, context: [] },
-        { path: "file2.md", name: "file2", line_number: 2, context: [] }
-      ]
-      controller.selectedIndex = 1
-      controller.renderResults()
-
-      const buttons = controller.resultsTarget.querySelectorAll("button")
-      expect(buttons[1].className).toContain("bg-[var(--theme-accent)]")
-    })
-
-    it("shows context lines with match highlighting", () => {
-      controller.searchResultsData = [
-        {
-          path: "test.md",
-          name: "test",
-          line_number: 10,
-          context: [
-            { line_number: 10, content: "match here", is_match: true }
-          ]
-        }
-      ]
-      controller.renderResults()
-
-      expect(controller.resultsTarget.innerHTML).toContain("bg-[var(--theme-selection)]")
     })
   })
 
@@ -386,14 +330,14 @@ describe("ContentSearchController", () => {
       expect(controller.selectedIndex).toBe(0)
     })
 
-    it("does not re-render if same index", () => {
-      const renderSpy = vi.spyOn(controller, "renderResults")
+    it("does not update selection if same index", () => {
+      const updateSpy = vi.spyOn(controller, "updateSelection")
       controller.selectedIndex = 1
       const event = { currentTarget: { dataset: { index: "1" } } }
 
       controller.onHover(event)
 
-      expect(renderSpy).not.toHaveBeenCalled()
+      expect(updateSpy).not.toHaveBeenCalled()
     })
   })
 
@@ -523,11 +467,15 @@ describe("ContentSearchController", () => {
   describe("updateSelection()", () => {
     beforeEach(() => {
       controller.searchResultsData = [
-        { path: "file1.md", name: "file1", line_number: 1, context: [] },
-        { path: "file2.md", name: "file2", line_number: 2, context: [] }
+        { path: "file1.md", line_number: 1 },
+        { path: "file2.md", line_number: 2 }
       ]
       controller.selectedIndex = 0
-      controller.renderResults()
+      // Simulate server-rendered HTML with first item selected
+      controller.resultsTarget.innerHTML = [
+        '<button data-index="0" data-path="file1.md" data-line="1" class="bg-[var(--theme-accent)] text-[var(--theme-accent-text)]">file1</button>',
+        '<button data-index="1" data-path="file2.md" data-line="2" class="hover:bg-[var(--theme-bg-hover)]">file2</button>'
+      ].join("")
     })
 
     it("updates selectedIndex", () => {

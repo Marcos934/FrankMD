@@ -70,9 +70,10 @@ describe("AiImageSource", () => {
 
       const result = await source.loadConfig()
 
-      expect(global.fetch).toHaveBeenCalledWith("/ai/image_config", {
-        headers: { "Accept": "application/json" }
-      })
+      expect(global.fetch).toHaveBeenCalledWith("/ai/image_config", expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({ "Accept": "application/json" })
+      }))
       expect(source.enabled).toBe(true)
       expect(source.model).toBe("imagen-3.0")
       expect(result).toEqual({ enabled: true, model: "imagen-3.0" })
@@ -97,14 +98,14 @@ describe("AiImageSource", () => {
 
   describe("generate", () => {
     it("returns error for empty prompt", async () => {
-      const result = await source.generate("", "token")
+      const result = await source.generate("")
       expect(result.error).toBe("Please enter a prompt describing the image you want to generate")
     })
 
     it("returns error when not enabled", async () => {
       source.enabled = false
 
-      const result = await source.generate("a cat", "token")
+      const result = await source.generate("a cat")
 
       expect(result.error).toBe("AI image generation is not configured. Please add your Gemini API key to .fed")
     })
@@ -122,17 +123,17 @@ describe("AiImageSource", () => {
         })
       })
 
-      const result = await source.generate("a cat", "csrf-token")
+      const result = await source.generate("a cat")
 
-      expect(global.fetch).toHaveBeenCalledWith("/ai/generate_image", {
+      expect(global.fetch).toHaveBeenCalledWith("/ai/generate_image", expect.objectContaining({
         method: "POST",
-        headers: {
+        headers: expect.objectContaining({
           "Content-Type": "application/json",
-          "X-CSRF-Token": "csrf-token"
-        },
+          "Accept": "application/json"
+        }),
         body: JSON.stringify({ prompt: "a cat" }),
         signal: expect.any(AbortSignal)
-      })
+      }))
 
       expect(result.success).toBe(true)
       expect(result.imageData.data).toBe("base64imagedata")
@@ -148,7 +149,7 @@ describe("AiImageSource", () => {
         json: () => Promise.resolve({ data: "base64", mime_type: "image/png" })
       })
 
-      await source.generate("a cat like this", "token")
+      await source.generate("a cat like this")
 
       const callArgs = global.fetch.mock.calls[0]
       const body = JSON.parse(callArgs[1].body)
@@ -165,7 +166,7 @@ describe("AiImageSource", () => {
         })
       })
 
-      const result = await source.generate("a cat", "token")
+      const result = await source.generate("a cat")
 
       expect(result.previewSrc).toBe("https://example.com/generated.jpg")
     })
@@ -177,7 +178,7 @@ describe("AiImageSource", () => {
         json: () => Promise.resolve({ error: "Content policy violation" })
       })
 
-      const result = await source.generate("bad prompt", "token")
+      const result = await source.generate("bad prompt")
 
       expect(result.error).toBe("Content policy violation")
     })
@@ -190,7 +191,7 @@ describe("AiImageSource", () => {
 
       global.fetch = vi.fn().mockRejectedValue(abortError)
 
-      const result = await source.generate("a cat", "token")
+      const result = await source.generate("a cat")
 
       expect(result.cancelled).toBe(true)
     })
@@ -200,7 +201,7 @@ describe("AiImageSource", () => {
 
       global.fetch = vi.fn().mockRejectedValue(new Error("Network error"))
 
-      const result = await source.generate("a cat", "token")
+      const result = await source.generate("a cat")
 
       expect(result.error).toBe("Failed to generate image. Please try again.")
     })
@@ -212,7 +213,7 @@ describe("AiImageSource", () => {
         json: () => Promise.resolve({ data: "base64", mime_type: "image/png" })
       })
 
-      await source.generate("a cat", "token")
+      await source.generate("a cat")
 
       expect(source.abortController).toBeNull()
     })
@@ -263,9 +264,10 @@ describe("AiImageSource", () => {
 
       const result = await source.loadRefImages()
 
-      expect(global.fetch).toHaveBeenCalledWith("/images", {
-        headers: { "Accept": "application/json" }
-      })
+      expect(global.fetch).toHaveBeenCalledWith("/images", expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({ "Accept": "application/json" })
+      }))
       expect(result).toEqual(mockImages)
     })
 
@@ -277,9 +279,10 @@ describe("AiImageSource", () => {
 
       await source.loadRefImages("cat")
 
-      expect(global.fetch).toHaveBeenCalledWith("/images?search=cat", {
-        headers: { "Accept": "application/json" }
-      })
+      expect(global.fetch).toHaveBeenCalledWith("/images?search=cat", expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({ "Accept": "application/json" })
+      }))
     })
 
     it("handles error", async () => {
@@ -342,7 +345,7 @@ describe("AiImageSource", () => {
     it("returns error when no generated data", async () => {
       source.generatedData = null
 
-      const result = await source.save(false, "token")
+      const result = await source.save(false)
 
       expect(result.error).toBe("No generated image data available")
     })
@@ -358,16 +361,16 @@ describe("AiImageSource", () => {
         json: () => Promise.resolve({ url: "/images/ai_123.png" })
       })
 
-      const result = await source.save(false, "csrf-token")
+      const result = await source.save(false)
 
-      expect(global.fetch).toHaveBeenCalledWith("/images/upload_base64", {
+      expect(global.fetch).toHaveBeenCalledWith("/images/upload_base64", expect.objectContaining({
         method: "POST",
-        headers: {
+        headers: expect.objectContaining({
           "Content-Type": "application/json",
-          "X-CSRF-Token": "csrf-token"
-        },
+          "Accept": "application/json"
+        }),
         body: expect.stringContaining('"data":"base64imagedata"')
-      })
+      }))
       expect(result.url).toBe("/images/ai_123.png")
     })
 
@@ -382,7 +385,7 @@ describe("AiImageSource", () => {
         json: () => Promise.resolve({ url: "https://s3.example.com/ai_123.png" })
       })
 
-      const result = await source.save(true, "token")
+      const result = await source.save(true)
 
       const body = JSON.parse(global.fetch.mock.calls[0][1].body)
       expect(body.upload_to_s3).toBe(true)
@@ -395,7 +398,7 @@ describe("AiImageSource", () => {
         data: null
       }
 
-      const result = await source.save(false, "token")
+      const result = await source.save(false)
 
       expect(result.url).toBe("https://ai-service.com/generated.jpg")
     })
@@ -411,16 +414,16 @@ describe("AiImageSource", () => {
         json: () => Promise.resolve({ url: "https://s3.example.com/ai_123.jpg" })
       })
 
-      const result = await source.save(true, "csrf-token")
+      const result = await source.save(true)
 
-      expect(global.fetch).toHaveBeenCalledWith("/images/upload_external_to_s3", {
+      expect(global.fetch).toHaveBeenCalledWith("/images/upload_external_to_s3", expect.objectContaining({
         method: "POST",
-        headers: {
+        headers: expect.objectContaining({
           "Content-Type": "application/json",
-          "X-CSRF-Token": "csrf-token"
-        },
+          "Accept": "application/json"
+        }),
         body: JSON.stringify({ url: "https://ai-service.com/generated.jpg" })
-      })
+      }))
       expect(result.url).toBe("https://s3.example.com/ai_123.jpg")
     })
 
@@ -432,7 +435,7 @@ describe("AiImageSource", () => {
         json: () => Promise.resolve({ error: "Disk full" })
       })
 
-      await expect(source.save(false, "token")).rejects.toThrow("Disk full")
+      await expect(source.save(false)).rejects.toThrow("Disk full")
     })
 
     it("handles save error for S3 URL upload", async () => {
@@ -443,7 +446,7 @@ describe("AiImageSource", () => {
         json: () => Promise.resolve({ error: "S3 error" })
       })
 
-      await expect(source.save(true, "token")).rejects.toThrow("S3 error")
+      await expect(source.save(true)).rejects.toThrow("S3 error")
     })
   })
 })

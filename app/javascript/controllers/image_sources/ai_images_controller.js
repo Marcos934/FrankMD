@@ -32,10 +32,6 @@ export default class extends Controller {
     this.source.abort()
   }
 
-  get csrfToken() {
-    return document.querySelector('meta[name="csrf-token"]')?.content || ""
-  }
-
   // Called by parent controller when tab becomes active
   async activate() {
     if (this.enabledValue && this.hasPromptTarget) {
@@ -98,7 +94,7 @@ export default class extends Controller {
     }
     document.addEventListener("keydown", escHandler)
 
-    const result = await this.source.generate(prompt, this.csrfToken)
+    const result = await this.source.generate(prompt)
 
     document.removeEventListener("keydown", escHandler)
 
@@ -193,7 +189,7 @@ export default class extends Controller {
 
   async getImageUrl() {
     const uploadToS3 = this.s3EnabledValue && this.hasSaveS3Target && this.saveS3Target.checked
-    const data = await this.source.save(uploadToS3, this.csrfToken)
+    const data = await this.source.save(uploadToS3)
     return data.url
   }
 

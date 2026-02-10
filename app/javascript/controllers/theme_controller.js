@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { patch } from "@rails/request.js"
 
 export default class extends Controller {
   static targets = ["menu", "currentTheme"]
@@ -81,18 +82,13 @@ export default class extends Controller {
 
     this.configSaveTimeout = setTimeout(async () => {
       try {
-        const response = await fetch("/config", {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]')?.content
-          },
-          body: JSON.stringify({ theme: themeId })
+        const response = await patch("/config", {
+          body: { theme: themeId },
+          responseKind: "json"
         })
 
         if (!response.ok) {
-          console.warn("Failed to save theme config:", await response.text())
+          console.warn("Failed to save theme config:", await response.text)
         } else {
           // Notify other controllers that config file was modified
           window.dispatchEvent(new CustomEvent("frankmd:config-file-modified"))

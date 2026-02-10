@@ -22,7 +22,14 @@ class YoutubeController < ApplicationController
     end
 
     results = search_youtube(query)
-    render json: results
+
+    respond_to do |format|
+      format.html do
+        videos = results[:videos] || []
+        render partial: "youtube/search_results", locals: { videos: videos }, layout: false
+      end
+      format.json { render json: results }
+    end
   rescue StandardError => e
     Rails.logger.error("YouTube search error: #{e.message}")
     render json: { error: t("errors.search_failed") }, status: :internal_server_error

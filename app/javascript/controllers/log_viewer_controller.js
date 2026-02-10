@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { get } from "@rails/request.js"
 
 // Log Viewer Controller
 // Opens a dialog showing the last 100 lines of the Rails log
@@ -75,15 +76,13 @@ export default class extends Controller {
 
   async fetchLogs() {
     try {
-      const response = await fetch("/logs/tail?lines=100", {
-        headers: { "Accept": "application/json" }
-      })
+      const response = await get("/logs/tail?lines=100", { responseKind: "json" })
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
+        throw new Error(`HTTP ${response.statusCode}`)
       }
 
-      const data = await response.json()
+      const data = await response.json
 
       if (this.hasEnvironmentTarget) {
         this.environmentTarget.textContent = `${data.environment} - ${data.file}`
@@ -112,15 +111,13 @@ export default class extends Controller {
 
   async fetchConfig() {
     try {
-      const response = await fetch("/logs/config", {
-        headers: { "Accept": "application/json" }
-      })
+      const response = await get("/logs/config", { responseKind: "json" })
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
+        throw new Error(`HTTP ${response.statusCode}`)
       }
 
-      const data = await response.json()
+      const data = await response.json
 
       if (this.hasEnvironmentTarget) {
         this.environmentTarget.textContent = `${data.environment} - ${data.config_file_exists ? data.config_file : "(no .fed file)"}`

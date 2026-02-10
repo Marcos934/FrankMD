@@ -16,10 +16,6 @@ export default class extends Controller {
     this.selectedImage = null
   }
 
-  get csrfToken() {
-    return document.querySelector('meta[name="csrf-token"]')?.content || ""
-  }
-
   get s3Option() {
     const el = this.element.querySelector('[data-controller="s3-option"]')
     return el ? this.application.getControllerForElementAndIdentifier(el, "s3-option") : null
@@ -98,7 +94,7 @@ export default class extends Controller {
     const resizeRatio = s3?.resizeRatio || ""
 
     if (reuploadToS3) {
-      const data = await this.source.uploadToS3(this.selectedImage.url, resizeRatio, this.csrfToken)
+      const data = await this.source.uploadToS3(this.selectedImage.url, resizeRatio)
       return data.url
     }
 

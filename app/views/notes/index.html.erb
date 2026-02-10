@@ -2,7 +2,37 @@
      data-controller="app autosave scroll-sync connection-monitor typewriter"
      data-action="connection-monitor:offline->autosave#onConnectionLost connection-monitor:online->autosave#onConnectionRestored autosave:config-saved->app#onAutosaveConfigSaved autosave:offline-changed->app#onAutosaveOfflineChanged typewriter:toggled->app#onTypewriterToggled typewriter:toggled->scroll-sync#onTypewriterToggled"
      data-app-initial-path-value="<%= @initial_path.to_json %>"
-     data-app-initial-note-value="<%= (@initial_note || {}).to_json %>">
+     data-app-initial-note-value="<%= (@initial_note || {}).to_json %>"
+     data-app-codemirror-outlet='[data-controller~="codemirror"]'
+     data-app-preview-outlet='[data-controller~="preview"]'
+     data-app-typewriter-outlet='[data-controller~="typewriter"]'
+     data-app-stats-panel-outlet='[data-controller~="stats-panel"]'
+     data-app-path-display-outlet='[data-controller~="path-display"]'
+     data-app-text-format-outlet='[data-controller~="text-format"]'
+     data-app-help-outlet='[data-controller~="help"]'
+     data-app-file-operations-outlet='[data-controller~="file-operations"]'
+     data-app-emoji-picker-outlet='[data-controller~="emoji-picker"]'
+     data-app-offline-backup-outlet='[data-controller~="offline-backup"]'
+     data-app-recovery-diff-outlet='[data-controller~="recovery-diff"]'
+     data-app-autosave-outlet='[data-controller~="autosave"]'
+     data-app-scroll-sync-outlet='[data-controller~="scroll-sync"]'
+     data-app-editor-config-outlet='[data-controller~="editor-config"]'
+     data-app-image-picker-outlet='[data-controller~="image-picker"]'
+     data-app-file-finder-outlet='[data-controller~="file-finder"]'
+     data-app-find-replace-outlet='[data-controller~="find-replace"]'
+     data-app-jump-to-line-outlet='[data-controller~="jump-to-line"]'
+     data-app-content-search-outlet='[data-controller~="content-search"]'
+     data-app-ai-grammar-outlet='[data-controller~="ai-grammar"]'
+     data-app-video-dialog-outlet='[data-controller~="video-dialog"]'
+     data-app-log-viewer-outlet='[data-controller~="log-viewer"]'
+     data-app-code-dialog-outlet='[data-controller~="code-dialog"]'
+     data-app-customize-outlet='[data-controller~="customize"]'
+     data-app-drag-drop-outlet='[data-controller~="drag-drop"]'
+     data-autosave-codemirror-outlet='[data-controller~="codemirror"]'
+     data-autosave-offline-backup-outlet='[data-controller~="offline-backup"]'
+     data-autosave-recovery-diff-outlet='[data-controller~="recovery-diff"]'
+     data-scroll-sync-codemirror-outlet='[data-controller~="codemirror"]'
+     data-scroll-sync-preview-outlet='[data-controller~="preview"]'>
 
   <%= render "config/editor_config" %>
 

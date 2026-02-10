@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { get, patch } from "@rails/request.js"
 import { marked } from "marked"
 import { escapeHtml } from "lib/text_utils"
 import { findTableAtPosition, findCodeBlockAtPosition } from "lib/markdown_utils"
@@ -35,6 +36,16 @@ export default class extends Controller {
     "editorBody"
   ]
 
+  static outlets = [
+    "codemirror", "preview", "typewriter", "stats-panel",
+    "path-display", "text-format", "help", "file-operations",
+    "emoji-picker", "offline-backup", "recovery-diff",
+    "autosave", "scroll-sync", "editor-config",
+    "image-picker", "file-finder", "find-replace", "jump-to-line",
+    "content-search", "ai-grammar", "video-dialog", "log-viewer",
+    "code-dialog", "customize", "drag-drop"
+  ]
+
   static values = {
     initialPath: String,
     initialNote: Object
@@ -51,10 +62,6 @@ export default class extends Controller {
 
     // Track pending config saves to debounce
     this.configSaveTimeout = null
-
-    // Controller caching - avoid repeated querySelector calls
-    this._controllerCache = {}
-    this._controllerCacheTimeout = null
 
     // Debounce timers for performance
     this._tableCheckTimeout = null
@@ -91,7 +98,6 @@ export default class extends Controller {
   disconnect() {
     // Clear all timeouts
     if (this.configSaveTimeout) clearTimeout(this.configSaveTimeout)
-    if (this._controllerCacheTimeout) clearTimeout(this._controllerCacheTimeout)
     if (this._tableCheckTimeout) clearTimeout(this._tableCheckTimeout)
 
     // Remove window/document event listeners
@@ -117,102 +123,22 @@ export default class extends Controller {
     }
   }
 
-  // === Controller Getters (with caching) ===
+  // === Controller Getters (via Stimulus Outlets) ===
 
-  // Get a cached controller reference, with automatic invalidation
-  // Controllers are cached for 5 seconds to balance performance with DOM changes
-  _getCachedController(name, selector) {
-    const cached = this._controllerCache[name]
-    if (cached && cached.controller) {
-      return cached.controller
-    }
-
-    const element = document.querySelector(selector)
-    if (element) {
-      const controller = this.application.getControllerForElementAndIdentifier(element, name)
-      if (controller) {
-        this._controllerCache[name] = { controller }
-        // Auto-invalidate cache after 5 seconds (handles DOM changes)
-        this._scheduleControllerCacheInvalidation()
-        return controller
-      }
-    }
-    return null
-  }
-
-  // Schedule cache invalidation (debounced to avoid constant clearing)
-  _scheduleControllerCacheInvalidation() {
-    if (this._controllerCacheTimeout) return // Already scheduled
-    this._controllerCacheTimeout = setTimeout(() => {
-      this._controllerCache = {}
-      this._controllerCacheTimeout = null
-    }, 5000)
-  }
-
-  // Invalidate controller cache immediately (call when DOM structure changes)
-  _invalidateControllerCache() {
-    this._controllerCache = {}
-    if (this._controllerCacheTimeout) {
-      clearTimeout(this._controllerCacheTimeout)
-      this._controllerCacheTimeout = null
-    }
-  }
-
-  getPreviewController() {
-    return this._getCachedController("preview", '[data-controller~="preview"]')
-  }
-
-  getTypewriterController() {
-    return this._getCachedController("typewriter", '[data-controller~="typewriter"]')
-  }
-
-  getCodemirrorController() {
-    return this._getCachedController("codemirror", '[data-controller~="codemirror"]')
-  }
-
-  getPathDisplayController() {
-    return this._getCachedController("path-display", '[data-controller~="path-display"]')
-  }
-
-  getTextFormatController() {
-    return this._getCachedController("text-format", '[data-controller~="text-format"]')
-  }
-
-  getHelpController() {
-    return this._getCachedController("help", '[data-controller~="help"]')
-  }
-
-  getStatsPanelController() {
-    return this._getCachedController("stats-panel", '[data-controller~="stats-panel"]')
-  }
-
-  getFileOperationsController() {
-    return this._getCachedController("file-operations", '[data-controller~="file-operations"]')
-  }
-
-  getEmojiPickerController() {
-    return this._getCachedController("emoji-picker", '[data-controller~="emoji-picker"]')
-  }
-
-  getOfflineBackupController() {
-    return this._getCachedController("offline-backup", '[data-controller~="offline-backup"]')
-  }
-
-  getRecoveryDiffController() {
-    return this._getCachedController("recovery-diff", '[data-controller~="recovery-diff"]')
-  }
-
-  getAutosaveController() {
-    return this._getCachedController("autosave", '[data-controller~="autosave"]')
-  }
-
-  getScrollSyncController() {
-    return this._getCachedController("scroll-sync", '[data-controller~="scroll-sync"]')
-  }
-
-  getEditorConfigController() {
-    return this._getCachedController("editor-config", '[data-controller~="editor-config"]')
-  }
+  getPreviewController() { return this.hasPreviewOutlet ? this.previewOutlet : null }
+  getTypewriterController() { return this.hasTypewriterOutlet ? this.typewriterOutlet : null }
+  getCodemirrorController() { return this.hasCodemirrorOutlet ? this.codemirrorOutlet : null }
+  getPathDisplayController() { return this.hasPathDisplayOutlet ? this.pathDisplayOutlet : null }
+  getTextFormatController() { return this.hasTextFormatOutlet ? this.textFormatOutlet : null }
+  getHelpController() { return this.hasHelpOutlet ? this.helpOutlet : null }
+  getStatsPanelController() { return this.hasStatsPanelOutlet ? this.statsPanelOutlet : null }
+  getFileOperationsController() { return this.hasFileOperationsOutlet ? this.fileOperationsOutlet : null }
+  getEmojiPickerController() { return this.hasEmojiPickerOutlet ? this.emojiPickerOutlet : null }
+  getOfflineBackupController() { return this.hasOfflineBackupOutlet ? this.offlineBackupOutlet : null }
+  getRecoveryDiffController() { return this.hasRecoveryDiffOutlet ? this.recoveryDiffOutlet : null }
+  getAutosaveController() { return this.hasAutosaveOutlet ? this.autosaveOutlet : null }
+  getScrollSyncController() { return this.hasScrollSyncOutlet ? this.scrollSyncOutlet : null }
+  getEditorConfigController() { return this.hasEditorConfigOutlet ? this.editorConfigOutlet : null }
 
   // === URL Management for Bookmarkable URLs ===
 
@@ -381,12 +307,10 @@ export default class extends Controller {
     const { updateHistory = true } = options
 
     try {
-      const response = await fetch(`/notes/${encodePath(path)}`, {
-        headers: { "Accept": "application/json" }
-      })
+      const response = await get(`/notes/${encodePath(path)}`, { responseKind: "json" })
 
       if (!response.ok) {
-        if (response.status === 404) {
+        if (response.statusCode === 404) {
           this.showFileNotFoundMessage(path, window.t("errors.note_not_found"))
           if (updateHistory) {
             this.updateUrl(null)
@@ -396,7 +320,7 @@ export default class extends Controller {
         throw new Error(window.t("errors.failed_to_load"))
       }
 
-      const data = await response.json()
+      const data = await response.json
       this.currentFile = path
       const fileType = this.getFileType(path)
 
@@ -666,32 +590,16 @@ export default class extends Controller {
 
   // Open image picker dialog (delegates to image-picker controller)
   openImagePicker() {
-    const imagePickerElement = document.querySelector('[data-controller~="image-picker"]')
-    if (imagePickerElement) {
-      const imagePickerController = this.application.getControllerForElementAndIdentifier(
-        imagePickerElement,
-        "image-picker"
-      )
-      if (imagePickerController) {
-        imagePickerController.open()
-      }
-    }
+    if (this.hasImagePickerOutlet) this.imagePickerOutlet.open()
   }
 
   // === Editor Customization - Delegates to customize_controller ===
   openCustomize() {
-    const customizeElement = document.querySelector('[data-controller~="customize"]')
-    if (customizeElement) {
-      const customizeController = this.application.getControllerForElementAndIdentifier(
-        customizeElement,
-        "customize"
-      )
-      if (customizeController) {
-        const configCtrl = this.getEditorConfigController()
-        const font = configCtrl ? configCtrl.currentFont : "cascadia-code"
-        const fontSize = configCtrl ? configCtrl.currentFontSize : 14
-        customizeController.open(font, fontSize)
-      }
+    if (this.hasCustomizeOutlet) {
+      const configCtrl = this.getEditorConfigController()
+      const font = configCtrl ? configCtrl.currentFont : "cascadia-code"
+      const fontSize = configCtrl ? configCtrl.currentFontSize : 14
+      this.customizeOutlet.open(font, fontSize)
     }
   }
 
@@ -795,18 +703,13 @@ export default class extends Controller {
     // Debounce saves to avoid excessive API calls
     this.configSaveTimeout = setTimeout(async () => {
       try {
-        const response = await fetch("/config", {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]')?.content
-          },
-          body: JSON.stringify(settings)
+        const response = await patch("/config", {
+          body: settings,
+          responseKind: "json"
         })
 
         if (!response.ok) {
-          console.warn("Failed to save config:", await response.text())
+          console.warn("Failed to save config:", await response.text)
         } else {
           // Notify other controllers that config file was modified
           window.dispatchEvent(new CustomEvent("frankmd:config-file-modified"))
@@ -822,12 +725,10 @@ export default class extends Controller {
     if (this.currentFile !== ".fed") return
 
     try {
-      const response = await fetch(`/notes/${encodePath(".fed")}`, {
-        headers: { "Accept": "application/json" }
-      })
+      const response = await get(`/notes/${encodePath(".fed")}`, { responseKind: "json" })
 
       if (response.ok) {
-        const data = await response.json()
+        const data = await response.json
         const codemirrorController = this.getCodemirrorController()
         if (codemirrorController) {
           // Save cursor position
@@ -985,19 +886,8 @@ export default class extends Controller {
 
   // === File Finder (Ctrl+P) - Delegates to file_finder_controller ===
   openFileFinder() {
-    // Build flat list of all files from DOM tree
-    const files = this.getFilesFromTree()
-
-    // Find the file-finder controller and call open
-    const fileFinderElement = document.querySelector('[data-controller~="file-finder"]')
-    if (fileFinderElement) {
-      const fileFinderController = this.application.getControllerForElementAndIdentifier(
-        fileFinderElement,
-        "file-finder"
-      )
-      if (fileFinderController) {
-        fileFinderController.open(files)
-      }
+    if (this.hasFileFinderOutlet) {
+      this.fileFinderOutlet.open(this.getFilesFromTree())
     }
   }
 
@@ -1038,23 +928,14 @@ export default class extends Controller {
   }
 
   openFindReplace(options = {}) {
-    const codemirrorController = this.getCodemirrorController()
-    const selection = codemirrorController ? codemirrorController.getSelection().text : ""
-
-    const findReplaceElement = document.querySelector('[data-controller~="find-replace"]')
-    if (findReplaceElement) {
-      const findReplaceController = this.application.getControllerForElementAndIdentifier(
-        findReplaceElement,
-        "find-replace"
-      )
-      if (findReplaceController) {
-        // Pass the codemirror controller's API adapter
-        findReplaceController.open({
-          textarea: this.createTextareaAdapter(),
-          tab: options.tab,
-          query: selection || undefined
-        })
-      }
+    if (this.hasFindReplaceOutlet) {
+      const codemirrorController = this.getCodemirrorController()
+      const selection = codemirrorController ? codemirrorController.getSelection().text : ""
+      this.findReplaceOutlet.open({
+        textarea: this.createTextareaAdapter(),
+        tab: options.tab,
+        query: selection || undefined
+      })
     }
   }
 
@@ -1105,16 +986,8 @@ export default class extends Controller {
   }
 
   openJumpToLine() {
-    const jumpElement = document.querySelector('[data-controller~="jump-to-line"]')
-    if (jumpElement) {
-      const jumpController = this.application.getControllerForElementAndIdentifier(
-        jumpElement,
-        "jump-to-line"
-      )
-      if (jumpController) {
-        // Pass a textarea adapter for the jump-to-line controller
-        jumpController.open(this.createTextareaAdapter())
-      }
+    if (this.hasJumpToLineOutlet) {
+      this.jumpToLineOutlet.open(this.createTextareaAdapter())
     }
   }
 
@@ -1126,16 +999,7 @@ export default class extends Controller {
 
   // Content Search (Ctrl+Shift+F) - Delegates to content_search_controller
   openContentSearch() {
-    const contentSearchElement = document.querySelector('[data-controller~="content-search"]')
-    if (contentSearchElement) {
-      const contentSearchController = this.application.getControllerForElementAndIdentifier(
-        contentSearchElement,
-        "content-search"
-      )
-      if (contentSearchController) {
-        contentSearchController.open()
-      }
-    }
+    if (this.hasContentSearchOutlet) this.contentSearchOutlet.open()
   }
 
   // Handle search result selected event from content_search_controller
@@ -1169,47 +1033,28 @@ export default class extends Controller {
 
   // === Log Viewer - Delegates to log_viewer_controller ===
   openLogViewer() {
-    const logViewerElement = document.querySelector('[data-controller~="log-viewer"]')
-    if (logViewerElement) {
-      const logViewerController = this.application.getControllerForElementAndIdentifier(
-        logViewerElement,
-        "log-viewer"
-      )
-      if (logViewerController) {
-        logViewerController.open()
-      }
-    }
+    if (this.hasLogViewerOutlet) this.logViewerOutlet.open()
   }
 
   // === Code Snippet Editor - Delegates to code_dialog_controller ===
   openCodeEditor() {
     const codemirrorController = this.getCodemirrorController()
-    if (!codemirrorController) return
+    if (!codemirrorController || !this.hasCodeDialogOutlet) return
 
     const text = codemirrorController.getValue()
     const cursorPos = codemirrorController.getCursorPosition().offset
     const codeBlock = findCodeBlockAtPosition(text, cursorPos)
 
-    // Find the code-dialog controller and call open
-    const codeDialogElement = document.querySelector('[data-controller~="code-dialog"]')
-    if (codeDialogElement) {
-      const codeDialogController = this.application.getControllerForElementAndIdentifier(
-        codeDialogElement,
-        "code-dialog"
-      )
-      if (codeDialogController) {
-        if (codeBlock) {
-          codeDialogController.open({
-            language: codeBlock.language || "",
-            content: codeBlock.content || "",
-            editMode: true,
-            startPos: codeBlock.startPos,
-            endPos: codeBlock.endPos
-          })
-        } else {
-          codeDialogController.open()
-        }
-      }
+    if (codeBlock) {
+      this.codeDialogOutlet.open({
+        language: codeBlock.language || "",
+        content: codeBlock.content || "",
+        editMode: true,
+        startPos: codeBlock.startPos,
+        endPos: codeBlock.endPos
+      })
+    } else {
+      this.codeDialogOutlet.open()
     }
   }
 
@@ -1235,16 +1080,7 @@ export default class extends Controller {
 
   // Video Dialog - delegates to video-dialog controller
   openVideoDialog() {
-    const videoDialogElement = document.querySelector('[data-controller~="video-dialog"]')
-    if (videoDialogElement) {
-      const videoDialogController = this.application.getControllerForElementAndIdentifier(
-        videoDialogElement,
-        "video-dialog"
-      )
-      if (videoDialogController) {
-        videoDialogController.open()
-      }
-    }
+    if (this.hasVideoDialogOutlet) this.videoDialogOutlet.open()
   }
 
   // Video Embed Event Handler - receives events from video_dialog_controller
@@ -1281,17 +1117,7 @@ export default class extends Controller {
       await autosaveForAi.saveNow()
     }
 
-    // Find the ai-grammar controller and call open
-    const aiGrammarElement = document.querySelector('[data-controller~="ai-grammar"]')
-    if (aiGrammarElement) {
-      const aiGrammarController = this.application.getControllerForElementAndIdentifier(
-        aiGrammarElement,
-        "ai-grammar"
-      )
-      if (aiGrammarController) {
-        aiGrammarController.open(this.currentFile)
-      }
-    }
+    if (this.hasAiGrammarOutlet) this.aiGrammarOutlet.open(this.currentFile)
   }
 
   // Handle AI processing started event - disable editor and show button loading state
@@ -1447,9 +1273,9 @@ export default class extends Controller {
     try {
       const expanded = [...this.expandedFolders].join(",")
       const selected = this.currentFile || ""
-      const response = await fetch(`/notes/tree?expanded=${encodeURIComponent(expanded)}&selected=${encodeURIComponent(selected)}`)
+      const response = await get(`/notes/tree?expanded=${encodeURIComponent(expanded)}&selected=${encodeURIComponent(selected)}`)
       if (response.ok) {
-        const html = await response.text()
+        const html = await response.text
         this.fileTreeTarget.innerHTML = html
       }
     } catch (error) {
@@ -1588,12 +1414,6 @@ export default class extends Controller {
   }
 
   // === Utilities ===
-
-  // Get CSRF token safely
-  get csrfToken() {
-    const meta = document.querySelector('meta[name="csrf-token"]')
-    return meta ? meta.content : ""
-  }
 
   // Position a dialog near a specific point (for explorer dialogs)
   positionDialogNearPoint(dialog, x, y) {

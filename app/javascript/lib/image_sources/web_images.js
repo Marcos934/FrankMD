@@ -1,6 +1,7 @@
 // Web Image Search (DuckDuckGo/Bing)
 // Handles searching for images via web search API
 
+import { get, post } from "@rails/request.js"
 import { escapeHtml } from "lib/text_utils"
 
 export class WebImageSource {
@@ -18,8 +19,8 @@ export class WebImageSource {
     }
 
     try {
-      const response = await fetch(`/images/search_web?q=${encodeURIComponent(query)}`)
-      const data = await response.json()
+      const response = await get(`/images/search_web?q=${encodeURIComponent(query)}`, { responseKind: "json" })
+      const data = await response.json
 
       if (data.error) {
         this.results = []
@@ -84,21 +85,17 @@ export class WebImageSource {
     }
   }
 
-  async uploadToS3(url, resize, csrfToken) {
-    const response = await fetch("/images/upload_external_to_s3", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRF-Token": csrfToken
-      },
-      body: JSON.stringify({ url, resize })
+  async uploadToS3(url, resize) {
+    const response = await post("/images/upload_external_to_s3", {
+      body: { url, resize },
+      responseKind: "json"
     })
 
     if (!response.ok) {
-      const data = await response.json()
+      const data = await response.json
       throw new Error(data.error || "Failed to upload to S3")
     }
 
-    return await response.json()
+    return await response.json
   }
 }

@@ -1,6 +1,7 @@
 // Local Server Images
 // Handles loading and displaying images from the server's images directory
 
+import { get, post } from "@rails/request.js"
 import { escapeHtml } from "lib/text_utils"
 import { encodePath } from "lib/url_utils"
 
@@ -16,15 +17,13 @@ export class LocalImageSource {
   async load(search = "") {
     try {
       const url = search ? `/images?search=${encodeURIComponent(search)}` : "/images"
-      const response = await fetch(url, {
-        headers: { "Accept": "application/json" }
-      })
+      const response = await get(url, { responseKind: "json" })
 
       if (!response.ok) {
         throw new Error("Failed to load images")
       }
 
-      return await response.json()
+      return await response.json
     } catch (error) {
       console.error("Error loading images:", error)
       return { error: "Error loading images" }
@@ -64,21 +63,17 @@ export class LocalImageSource {
     }
   }
 
-  async uploadToS3(path, resize, csrfToken) {
-    const response = await fetch("/images/upload_to_s3", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRF-Token": csrfToken
-      },
-      body: JSON.stringify({ path, resize })
+  async uploadToS3(path, resize) {
+    const response = await post("/images/upload_to_s3", {
+      body: { path, resize },
+      responseKind: "json"
     })
 
     if (!response.ok) {
-      const data = await response.json()
+      const data = await response.json
       throw new Error(data.error || "Failed to upload to S3")
     }
 
-    return await response.json()
+    return await response.json
   }
 }

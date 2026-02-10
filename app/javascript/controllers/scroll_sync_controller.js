@@ -2,6 +2,8 @@ import { Controller } from "@hotwired/stimulus"
 import { getEditorContent } from "lib/codemirror_adapter"
 
 export default class extends Controller {
+  static outlets = ["codemirror", "preview"]
+
   connect() {
     this._scrollSource = null
     this._scrollSourceTimeout = null
@@ -12,23 +14,10 @@ export default class extends Controller {
     if (this._scrollSourceTimeout) clearTimeout(this._scrollSourceTimeout)
   }
 
-  // === Controller Lookups ===
+  // === Controller Getters (via Stimulus Outlets) ===
 
-  _getController(name, selector) {
-    const element = document.querySelector(selector)
-    if (element) {
-      return this.application.getControllerForElementAndIdentifier(element, name)
-    }
-    return null
-  }
-
-  getCodemirrorController() {
-    return this._getController("codemirror", '[data-controller~="codemirror"]')
-  }
-
-  getPreviewController() {
-    return this._getController("preview", '[data-controller~="preview"]')
-  }
+  getCodemirrorController() { return this.hasCodemirrorOutlet ? this.codemirrorOutlet : null }
+  getPreviewController() { return this.hasPreviewOutlet ? this.previewOutlet : null }
 
   // === Event Handlers ===
 

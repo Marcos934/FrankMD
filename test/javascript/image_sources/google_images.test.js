@@ -86,7 +86,7 @@ describe("GoogleImageSource", () => {
 
       const result = await source.loadMore()
 
-      expect(global.fetch).toHaveBeenCalledWith("/images/search_google?q=cats&start=1")
+      expect(global.fetch).toHaveBeenCalledWith("/images/search_google?q=cats&start=1", expect.objectContaining({ method: "GET" }))
       expect(result.images).toHaveLength(1)
       expect(result.total).toBe(50)
       expect(source.nextStart).toBe(11)

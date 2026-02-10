@@ -21,10 +21,6 @@ export default class extends Controller {
     if (this.searchTimeout) clearTimeout(this.searchTimeout)
   }
 
-  get csrfToken() {
-    return document.querySelector('meta[name="csrf-token"]')?.content || ""
-  }
-
   get s3Option() {
     const el = this.element.querySelector('[data-controller="s3-option"]')
     return el ? this.application.getControllerForElementAndIdentifier(el, "s3-option") : null
@@ -99,7 +95,7 @@ export default class extends Controller {
     if (!path) return null
 
     if (uploadToS3) {
-      const data = await this.source.uploadToS3(path, resizeRatio, this.csrfToken)
+      const data = await this.source.uploadToS3(path, resizeRatio)
       return data.url
     }
 

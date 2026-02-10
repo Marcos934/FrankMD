@@ -28,7 +28,6 @@ describe("LocaleController", () => {
     })
 
     document.body.innerHTML = `
-      <meta name="csrf-token" content="test-token" />
       <div data-controller="locale" data-locale-initial-value="en">
         <span data-locale-target="currentLocale"></span>
         <div data-locale-target="menu" class="hidden"></div>
@@ -88,6 +87,7 @@ describe("LocaleController", () => {
 
     it("calls loadTranslations", () => {
       expect(fetch).toHaveBeenCalledWith("/translations", {
+        method: "GET",
         headers: { "Accept": "application/json" }
       })
     })
@@ -238,25 +238,27 @@ describe("LocaleController", () => {
     it("calls fetch with correct parameters", async () => {
       vi.useFakeTimers()
 
-      // Reset fetch mock to track new calls
-      fetch.mockClear()
-      fetch.mockResolvedValue({ ok: true })
+      try {
+        // Reset fetch mock to track new calls
+        fetch.mockClear()
+        fetch.mockResolvedValue({ ok: true })
 
-      controller.saveLocaleConfig("ja")
+        controller.saveLocaleConfig("ja")
 
-      vi.advanceTimersByTime(100)
-      await vi.runAllTimersAsync()
+        vi.advanceTimersByTime(100)
+        await vi.runAllTimersAsync()
 
-      expect(fetch).toHaveBeenCalledWith("/config", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "X-CSRF-Token": "test-token"
-        },
-        body: JSON.stringify({ locale: "ja" })
-      })
-      vi.useRealTimers()
+        expect(fetch).toHaveBeenCalledWith("/config", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+          },
+          body: JSON.stringify({ locale: "ja" })
+        })
+      } finally {
+        vi.useRealTimers()
+      }
     })
   })
 

@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { get } from "@rails/request.js"
 
 // Image Picker Controller
 // Thin orchestration layer that coordinates between source-specific controllers
@@ -27,11 +28,9 @@ export default class extends Controller {
 
   async loadConfig() {
     try {
-      const response = await fetch("/images/config", {
-        headers: { "Accept": "application/json" }
-      })
+      const response = await get("/images/config", { responseKind: "json" })
       if (response.ok) {
-        this.config = await response.json()
+        this.config = await response.json
       }
     } catch (error) {
       console.error("Error loading images config:", error)
