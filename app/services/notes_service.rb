@@ -197,7 +197,15 @@ class NotesService
   VISIBLE_DOTFILES = %w[.fed].freeze
 
   def build_tree(dir, relative_base = @base_path)
-    entries = dir.children.sort_by { |p| [ p.directory? ? 0 : 1, -p.mtime.to_i ] }
+    # Keep folders in stable alphabetical order so drag/drop updates inside a folder
+    # do not reorder it in the Explorer due to mtime changes.
+    entries = dir.children.sort_by do |p|
+      if p.directory?
+        [ 0, p.basename.to_s.downcase ]
+      else
+        [ 1, -p.mtime.to_i ]
+      end
+    end
 
     entries.filter_map do |entry|
       basename = entry.basename.to_s

@@ -51,6 +51,22 @@ class NotesServiceTest < ActiveSupport::TestCase
     assert_equal "file", tree.last[:type]
   end
 
+  test "list_tree keeps folder order stable regardless of mtime updates" do
+    create_test_folder("alpha")
+    create_test_folder("beta")
+    create_test_note("note.md")
+
+    # Simulate recent activity in beta (e.g., dropping a file into the folder).
+    beta_dir = @test_notes_dir.join("beta")
+    now = Time.now
+    File.utime(now, now + 60, beta_dir)
+
+    tree = @service.list_tree
+    folder_names = tree.select { |item| item[:type] == "folder" }.map { |item| item[:name] }
+
+    assert_equal %w[alpha beta], folder_names
+  end
+
   test "list_tree ignores hidden files" do
     create_test_note(".hidden.md")
     create_test_note("visible.md")

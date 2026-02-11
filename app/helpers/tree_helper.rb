@@ -32,8 +32,9 @@ module TreeHelper
         class: "tree-item drop-target",
         draggable: "true",
         data: {
-          action: "click->app#toggleFolder contextmenu->app#showContextMenu dragstart->drag-drop#onDragStart dragover->drag-drop#onDragOver dragenter->drag-drop#onDragEnter dragleave->drag-drop#onDragLeave drop->drag-drop#onDrop dragend->drag-drop#onDragEnd",
+          action: "click->app#toggleFolder contextmenu->app#showContextMenu dragstart->drag-drop#onDragStart dragover->drag-drop#onDragOver drop->drag-drop#onDrop dragend->drag-drop#onDragEnd",
           path: path,
+          drop_id: path,
           type: "folder"
         }) do
         chevron_svg(is_expanded) +
