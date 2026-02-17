@@ -300,6 +300,8 @@ export default class extends Controller {
     }
   }
 
+  get isSelecting() { return this._isSelecting || false }
+
   /**
    * Set scroll position
    * @param {number} top - Scroll top position

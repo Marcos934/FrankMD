@@ -42,6 +42,7 @@ export default class extends Controller {
     const codemirrorController = this.getCodemirrorController()
     if (!codemirrorController) return
 
+    if (codemirrorController.isSelecting) return
     if (this._scrollSource === "editor") return
 
     this._markScrollFromPreview()
