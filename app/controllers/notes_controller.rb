@@ -72,6 +72,7 @@ class NotesController < ApplicationController
       respond_to do |format|
         format.turbo_stream {
           load_tree_for_turbo_stream(selected: @note.path)
+          response.headers["X-Created-Path"] = @note.path
           render status: :created
         }
         format.any { render json: { path: @note.path, message: t("success.note_created") }, status: :created }

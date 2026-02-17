@@ -239,7 +239,7 @@ export default class extends Controller {
     // Turbo Stream responses are auto-processed by request.js
     // For JSON fallback, extract the path
     const path = response.isTurboStream
-      ? this.inferCreatedPath(name, parent, template)
+      ? (response.headers.get("X-Created-Path") || this.inferCreatedPath(name, parent, template))
       : (await response.json).path
     this.dispatch("file-created", { detail: { path } })
   }
