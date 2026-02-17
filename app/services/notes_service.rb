@@ -221,7 +221,8 @@ class NotesService
           name: basename,
           path: relative_path,
           type: "file",
-          file_type: "config"
+          file_type: "config",
+          mtime: entry.mtime.to_i
         }
       elsif entry.directory?
         {
@@ -235,7 +236,8 @@ class NotesService
           name: entry.basename(".md").to_s,
           path: relative_path,
           type: "file",
-          file_type: "markdown"
+          file_type: "markdown",
+          mtime: entry.mtime.to_i
         }
       end
     end

@@ -247,15 +247,11 @@ export default class extends Controller {
   // Infer the path for a created note when using turbo stream (no JSON body)
   inferCreatedPath(name, parent, template) {
     if (template === "hugo") {
-      // For Hugo posts, find the newly created file in the tree DOM
+      // The server marks the created file as selected in the turbo-stream response.
+      // By the time post() resolves, Turbo has updated the DOM, so just query for it.
       const treeEl = document.getElementById("file-tree-content")
-      if (treeEl) {
-        const items = treeEl.querySelectorAll('[data-type="file"]')
-        const slug = name.replace(/\.md$/, "").toLowerCase().replace(/[^a-z0-9]+/g, "-")
-        for (const item of items) {
-          if (item.dataset.path?.includes(slug)) return item.dataset.path
-        }
-      }
+      const selected = treeEl?.querySelector('.tree-item.selected[data-type="file"]')
+      if (selected?.dataset.path) return selected.dataset.path
       return name
     }
     const fileName = name.endsWith(".md") ? name : `${name}.md`

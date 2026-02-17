@@ -54,6 +54,7 @@ module TreeHelper
     path = item[:path] || item["path"]
     name = item[:name] || item["name"]
     file_type = item[:file_type] || item["file_type"] || "markdown"
+    mtime = item[:mtime] || item["mtime"]
     is_selected = selected_file == path
     is_config = file_type == "config"
 
@@ -64,7 +65,8 @@ module TreeHelper
           action: "click->app#selectFile",
           path: path,
           type: "file",
-          file_type: file_type
+          file_type: file_type,
+          mtime: mtime
         }
       }
     else
@@ -75,7 +77,8 @@ module TreeHelper
           action: "click->app#selectFile contextmenu->app#showContextMenu dragstart->drag-drop#onDragStart dragend->drag-drop#onDragEnd",
           path: path,
           type: "file",
-          file_type: file_type
+          file_type: file_type,
+          mtime: mtime
         }
       }
     end

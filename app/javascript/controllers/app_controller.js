@@ -944,15 +944,16 @@ export default class extends Controller {
     }
   }
 
-  // Build flat list of files from DOM tree for file finder
+  // Build flat list of files from DOM tree for file finder, sorted newest-first
   getFilesFromTree() {
     const fileElements = this.fileTreeTarget.querySelectorAll('[data-type="file"]')
     return Array.from(fileElements).map(el => ({
       path: el.dataset.path,
       name: el.dataset.path.split("/").pop().replace(/\.md$/, ""),
       type: "file",
-      file_type: el.dataset.fileType || "markdown"
-    }))
+      file_type: el.dataset.fileType || "markdown",
+      mtime: parseInt(el.dataset.mtime, 10) || 0
+    })).sort((a, b) => b.mtime - a.mtime)
   }
 
   // Handle file selected event from file_finder_controller
