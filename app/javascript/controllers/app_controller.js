@@ -18,6 +18,13 @@ import {
   insertCodeBlock,
   insertVideoEmbed
 } from "lib/codemirror_content_insertion"
+// Configure marked with custom extensions once globally
+marked.use({
+  breaks: true,
+  gfm: true,
+  extensions: allExtensions
+})
+
 export default class extends Controller {
   static targets = [
     "fileTree",
@@ -72,13 +79,6 @@ export default class extends Controller {
     this.initializeTypewriterMode()
     this.setupConfigFileListener()
     this.setupTableEditorListener()
-
-    // Configure marked with custom extensions for superscript, subscript, highlight, emoji
-    marked.use({
-      breaks: true,
-      gfm: true,
-      extensions: allExtensions
-    })
 
     // Setup browser history handling for back/forward buttons
     this.setupHistoryHandling()
@@ -548,6 +548,21 @@ export default class extends Controller {
       clearTimeout(this.configSaveTimeout)
       this.configSaveTimeout = null
     }
+  }
+
+  // Copy all content of the current note to clipboard
+  copyAll() {
+    const codemirrorController = this.getCodemirrorController()
+    if (!codemirrorController) return
+
+    const content = codemirrorController.getValue()
+    if (!content) return
+
+    navigator.clipboard.writeText(content).then(() => {
+      this.showTemporaryMessage(window.t("status.copied_to_clipboard"))
+    }).catch(err => {
+      console.error("Failed to copy content:", err)
+    })
   }
 
   // Reload configuration from server and apply changes

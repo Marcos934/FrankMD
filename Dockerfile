@@ -53,6 +53,8 @@ RUN bundle install && \
 # Copy app and precompile
 COPY . .
 
+RUN sed -i 's/\r$//' bin/*
+
 RUN bundle exec bootsnap precompile app/ lib/ && \
     SECRET_KEY_BASE_DUMMY=1 ./bin/rails assets:precompile
 

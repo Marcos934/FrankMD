@@ -16,7 +16,14 @@ export default class extends Controller {
     { id: "highlight", label: "Highlight", hotkey: "H", prefix: "==", suffix: "==" },
     { id: "subscript", label: "Subscript", hotkey: "U", prefix: "~", suffix: "~" },
     { id: "superscript", label: "Superscript", hotkey: "P", prefix: "^", suffix: "^" },
-    { id: "link", label: "Link", hotkey: "L", prefix: "[", suffix: "](url)" }
+    { id: "link", label: "Link", hotkey: "L", prefix: "[", suffix: "](url)" },
+    { id: "divider", type: "divider" },
+    { id: "red", label: "Red", hotkey: "R", prefix: "[", suffix: "]{red}", color: "#ef4444" },
+    { id: "orange", label: "Orange", hotkey: "O", prefix: "[", suffix: "]{orange}", color: "#f97316" },
+    { id: "yellow", label: "Yellow", hotkey: "Y", prefix: "[", suffix: "]{yellow}", color: "#eab308" },
+    { id: "green", label: "Green", hotkey: "G", prefix: "[", suffix: "]{green}", color: "#22c55e" },
+    { id: "blue", label: "Blue", hotkey: "V", prefix: "[", suffix: "]{blue}", color: "#3b82f6" },
+    { id: "purple", label: "Purple", hotkey: "M", prefix: "[", suffix: "]{purple}", color: "#a855f7" }
   ]
 
   connect() {
@@ -109,8 +116,17 @@ export default class extends Controller {
     if (!this.hasMenuTarget) return
 
     const items = this.constructor.formats.map((format, index) => {
+      if (format.type === "divider") {
+        return `<div class="my-1 border-t border-[var(--theme-border)]"></div>`
+      }
+
       const isSelected = index === this.selectedIndex
-      const labelWithHotkey = this.formatLabelWithHotkey(format.label, format.hotkey)
+      const translatedLabel = window.t ? window.t(`text_format.${format.id}`) : format.label
+      const labelWithHotkey = this.formatLabelWithHotkey(translatedLabel, format.hotkey)
+
+      const colorIndicator = format.color 
+        ? `<span class="w-3 h-3 rounded-full mr-2" style="background-color: ${format.color}"></span>`
+        : ""
 
       return `
         <button
@@ -124,7 +140,10 @@ export default class extends Controller {
           data-index="${index}"
           data-format-id="${format.id}"
         >
-          <span>${labelWithHotkey}</span>
+          <span class="flex items-center">
+            ${colorIndicator}
+            ${labelWithHotkey}
+          </span>
           <span class="text-xs ${isSelected ? "opacity-80" : "text-[var(--theme-text-muted)]"}">${format.hotkey}</span>
         </button>
       `
@@ -152,16 +171,24 @@ export default class extends Controller {
 
   // Handle keydown events on the menu
   onMenuKeydown(event) {
+    const formatsCount = this.constructor.formats.length
+
     switch (event.key) {
       case "ArrowDown":
         event.preventDefault()
-        this.selectedIndex = (this.selectedIndex + 1) % this.constructor.formats.length
+        this.selectedIndex = (this.selectedIndex + 1) % formatsCount
+        if (this.constructor.formats[this.selectedIndex].type === "divider") {
+          this.selectedIndex = (this.selectedIndex + 1) % formatsCount
+        }
         this.renderMenu()
         break
 
       case "ArrowUp":
         event.preventDefault()
-        this.selectedIndex = (this.selectedIndex - 1 + this.constructor.formats.length) % this.constructor.formats.length
+        this.selectedIndex = (this.selectedIndex - 1 + formatsCount) % formatsCount
+        if (this.constructor.formats[this.selectedIndex].type === "divider") {
+          this.selectedIndex = (this.selectedIndex - 1 + formatsCount) % formatsCount
+        }
         this.renderMenu()
         break
 
@@ -208,7 +235,7 @@ export default class extends Controller {
 
   // Apply the selected format: use CodeMirror if available, else dispatch event
   applyFormat(format) {
-    if (!format || !this.selectionData) return
+    if (!format || !this.selectionData || format.type === "divider") return
 
     const cm = this._getCodemirrorController()
     if (cm) {
@@ -281,9 +308,11 @@ export default class extends Controller {
     this.open(selectionData, x, y)
   }
 
-  // Check if a format is toggleable (symmetric prefix/suffix)
+  // Check if a format is toggleable (symmetric prefix/suffix or color tag)
   isToggleable(format) {
-    return format.prefix === format.suffix
+    if (format.prefix === format.suffix) return true
+    if (format.suffix && format.suffix.startsWith("]{") && format.suffix.endsWith("}")) return true
+    return false
   }
 
   // Check if text is wrapped with format markers and return unwrap info
@@ -293,6 +322,21 @@ export default class extends Controller {
     const end = textarea.selectionEnd
     const fullText = textarea.value
     const selectedText = fullText.substring(start, end)
+
+    // Handle color tags specifically (replace color)
+    if (suffix && suffix.startsWith("]{") && suffix.endsWith("}")) {
+      const colorMatch = selectedText.match(/^\[(.+)\]\{([a-zA-Z#0-9-]+)\}$ /)
+      if (colorMatch) {
+        return {
+          canUnwrap: true,
+          unwrapStart: start,
+          unwrapEnd: end,
+          newText: colorMatch[1],
+          cursorStart: start,
+          cursorEnd: start + colorMatch[1].length
+        }
+      }
+    }
 
     // Case 1: Selection itself includes the markers
     if (selectedText.startsWith(prefix) && selectedText.endsWith(suffix) && selectedText.length >= prefix.length + suffix.length) {
@@ -332,7 +376,7 @@ export default class extends Controller {
     if (!textarea) return
 
     const format = this.getFormat(formatId)
-    if (!format) return
+    if (!format || format.type === "divider") return
 
     const start = textarea.selectionStart
     const end = textarea.selectionEnd
@@ -413,10 +457,32 @@ export default class extends Controller {
     const { start, end, text } = selectionData
     const fullText = codemirrorController.getValue()
 
-    // Check for toggle (unwrap) if format is symmetric
-    const isToggleable = prefix === suffix
-    if (isToggleable) {
-      // Case 1: Selection itself includes the markers
+    // Check for toggle (unwrap) or replacement (for colors)
+    if (this.isToggleable(format)) {
+      // Case 1: If it's a color, and text is already colored, replace or remove
+      if (suffix && suffix.startsWith("]{") && suffix.endsWith("}")) {
+        const colorMatch = text.match(/^\[(.+)\]\{([a-zA-Z#0-9-]+)\}$/)
+        if (colorMatch) {
+          const innerText = colorMatch[1]
+          const existingColor = colorMatch[2]
+          const newColor = suffix.slice(2, -1)
+
+          if (existingColor === newColor) {
+            // Remove same color
+            codemirrorController.replaceRange(innerText, start, end)
+            codemirrorController.setSelection(start, start + innerText.length)
+          } else {
+            // Replace with new color
+            const replaced = `[${innerText}]{${newColor}}`
+            codemirrorController.replaceRange(replaced, start, end)
+            codemirrorController.setSelection(start, start + replaced.length)
+          }
+          codemirrorController.focus()
+          return
+        }
+      }
+
+      // Case 2: Selection itself includes the markers (symmetric)
       if (text.startsWith(prefix) && text.endsWith(suffix) && text.length >= prefix.length + suffix.length) {
         const unwrapped = text.slice(prefix.length, -suffix.length || undefined)
         codemirrorController.replaceRange(unwrapped, start, end)
@@ -425,7 +491,7 @@ export default class extends Controller {
         return
       }
 
-      // Case 2: Markers are just outside the selection
+      // Case 3: Markers are just outside the selection (symmetric)
       const beforeStart = start - prefix.length
       const afterEnd = end + suffix.length
       if (beforeStart >= 0 && afterEnd <= fullText.length) {

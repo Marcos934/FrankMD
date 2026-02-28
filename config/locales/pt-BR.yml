@@ -31,8 +31,9 @@ pt-BR:
   # Seção do cabeçalho
   header:
     toggle_explorer: "Alternar Explorador (Ctrl+E)"
-    toggle_typewriter: "Alternar Modo Máquina de Escrever (Ctrl+B)"
-    toggle_preview: "Alternar Visualização (Ctrl+Shift+P)"
+    toggle_typewriter: "Alternar Modo Máquina de Escrever (Ctrl+\\)"
+    toggle_preview: "Alternar Visualização (Ctrl+Shift+V)"
+    copy_all: "Copiar Tudo"
     change_theme: "Alterar Tema"
     change_language: "Alterar Idioma"
     about_app: "Sobre FrankMD"
@@ -427,6 +428,12 @@ pt-BR:
       subscript: "Subscrito"
       superscript: "Sobrescrito"
       link: "Link"
+      red: "Vermelho"
+      orange: "Laranja"
+      yellow: "Amarelo"
+      green: "Verde"
+      blue: "Azul"
+      purple: "Roxo"
 
     # Seletor de emoji
     emoji_picker:

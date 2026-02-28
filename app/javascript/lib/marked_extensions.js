@@ -74,6 +74,31 @@ export const highlightExtension = {
   }
 }
 
+// Color extension: [text]{color} -> <span style="color:color">text</span>
+export const colorExtension = {
+  name: "color",
+  level: "inline",
+  start(src) {
+    return src.indexOf("[")
+  },
+  tokenizer(src) {
+    // Match [text]{color} pattern - use non-greedy matching to avoid swallowing multiple tags
+    const match = src.match(/^\[((?:(?!\]\{).)*)\]\{([a-zA-Z#0-9-]+)\}/)
+    if (match) {
+      return {
+        type: "color",
+        raw: match[0],
+        text: match[1],
+        color: match[2]
+      }
+    }
+  },
+  renderer(token) {
+    // Support both color names and hex codes
+    return `<span style="color:${token.color}">${token.text}</span>`
+  }
+}
+
 // Emoji extension: :shortcode: -> emoji character
 export const emojiExtension = {
   name: "emoji",
@@ -107,5 +132,6 @@ export const allExtensions = [
   superscriptExtension,
   subscriptExtension,
   highlightExtension,
+  colorExtension,
   emojiExtension
 ]
