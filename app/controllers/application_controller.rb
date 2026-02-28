@@ -5,9 +5,19 @@ class ApplicationController < ActionController::Base
   # Changes to the importmap will invalidate the etag for HTML responses
   stale_when_importmap_changes
 
+  before_action :authenticate_user!
   before_action :set_locale
 
   private
+
+  def authenticate_user!
+    # Skip authentication if APP_PASSWORD is not set (optional, but requested for PRD)
+    return if ENV["APP_PASSWORD"].blank?
+    
+    unless session[:authenticated]
+      redirect_to login_path
+    end
+  end
 
   def set_locale
     locale = params[:locale] ||

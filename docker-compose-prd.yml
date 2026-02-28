@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  frankmd:
+    image: frankmd:latest
+    container_name: frankmd-prd
+    restart: unless-stopped
+    # Use environment variables from Portainer or .env file
+    user: "${UID:-1000}:${GID:-1000}"
+    ports:
+      - "${PORT:-7591}:80"
+    volumes:
+      # ADJUST THESE PATHS to match your server's storage location
+      - ${NOTES_PATH_HOST:-./notes-prd}:/rails/notes
+      - ${IMAGES_PATH_HOST:-./images-prd}:/rails/images
+    environment:
+      - SECRET_KEY_BASE=${SECRET_KEY_BASE}
+      - APP_PASSWORD=${APP_PASSWORD}
+      - NOTES_PATH=/rails/notes
+      - IMAGES_PATH=/rails/images
+      - FRANKMD_LOCALE=${FRANKMD_LOCALE:-pt-BR}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/up"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
